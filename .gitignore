@@ -83,3 +83,11 @@ screenshot*.png
 win*.png
 chromedriver.exe
 rustc-ice-*.txt
+
+# Private business / personal docs (never publish)
+docs/private/
+
+# DAW samples (large WAV blobs, opt-in via daw-samples feature)
+# Place locally to enable include_bytes! build
+kernel/src/trustdaw/*.wav
+
