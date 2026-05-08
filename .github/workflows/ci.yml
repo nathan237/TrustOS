@@ -74,3 +74,55 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --release -p trustos_kernel -- -A clippy::all
+
+  iso-smoke:
+    name: ISO Build Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+          targets: x86_64-unknown-none
+
+      - name: Install ISO tooling
+        run: sudo apt-get update && sudo apt-get install -y xorriso mtools
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ISO
+        run: make iso
+
+      - name: Verify ISO exists and is bootable
+        run: |
+          test -f trustos.iso
+          ls -lh trustos.iso
+          # Sanity: ISO should be at least 1 MB (kernel + limine)
+          size=$(stat -c%s trustos.iso)
+          if [ "$size" -lt 1048576 ]; then
+            echo "ISO suspiciously small: $size bytes"
+            exit 1
+          fi
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trustos-iso
+          path: trustos.iso
+          retention-days: 7

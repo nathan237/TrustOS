@@ -24,6 +24,8 @@
 - **🌐 Remote-first** — framebuffer streamed over UDP, shell over UDP, kernel logs over UDP. Debug headless boards from any laptop.
 - **🛠️ Built solo** — one developer, one vision, no committee.
 
+➡️ See the public [**ROADMAP**](ROADMAP.md) for what's next.
+
 ---
 
 ## What's new — v0.12.0 "Audio Edition" (April 2026)
