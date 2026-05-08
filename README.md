@@ -12,6 +12,11 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/nathan237/TrustOS?color=orange)](https://github.com/nathan237/TrustOS/releases)
 [![Sponsor](https://img.shields.io/github/sponsors/nathan237?color=ea4aaa&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/nathan237)
+[![Stars](https://img.shields.io/github/stars/nathan237/TrustOS?style=social)](https://github.com/nathan237/TrustOS/stargazers)
+
+<br/>
+
+<img src="media/screenshots/screen_showcase.png" alt="TrustOS running on real hardware" width="880"/>
 
 </div>
 
@@ -156,11 +161,11 @@ flowchart LR
 | Project | Lang | `no_std` kernel | Bare-metal GPU bring-up | Remote UDP shell | Solo dev |
 |---|---|---|---|---|---|
 | **TrustOS** | Rust | ✅ | ✅ AMD Polaris from scratch | ✅ | ✅ |
-| Redox OS | Rust | partial (microkernel) | ❌ (uses Linux drivers via patch) | ❌ | ❌ (team) |
-| Theseus | Rust | ✅ | ❌ | ❌ | research |
-| SerenityOS | C++ | ❌ | partial | ❌ | ❌ (team) |
-| Hubris | Rust | ✅ | embedded only | ❌ | ❌ (Oxide) |
-| seL4 | C | ✅ | ❌ | ❌ | ❌ |
+| [Redox OS](https://gitlab.redox-os.org/redox-os/redox) | Rust | partial (microkernel) | ❌ (uses Linux drivers via patch) | ❌ | ❌ (team) |
+| [Theseus](https://github.com/theseus-os/Theseus) | Rust | ✅ | ❌ | ❌ | research |
+| [SerenityOS](https://github.com/SerenityOS/serenity) | C++ | ❌ | partial | ❌ | ❌ (team) |
+| [Hubris](https://github.com/oxidecomputer/hubris) | Rust | ✅ | embedded only | ❌ | ❌ (Oxide) |
+| [seL4](https://github.com/seL4/seL4) | C | ✅ | ❌ | ❌ | ❌ |
 
 TrustOS is not trying to replace any of these. The angle is different: **boot anywhere, see everything, debug it remotely.**
 
@@ -288,4 +293,4 @@ If TrustOS is useful or interesting to you, [become a sponsor](https://github.co
 
 ---
 
-<sub>Built with AI assistance (GitHub Copilot, Claude). Every line is reviewed and understood by the author.</sub>
+<div align="center"><sub><i>Crafted with the help of AI pair programmers (GitHub Copilot, Claude). Every line reviewed and understood by the author. See <a href="CONTRIBUTING.md">CONTRIBUTING</a>.</i></sub></div>
