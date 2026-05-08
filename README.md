@@ -12,6 +12,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/nathan237/TrustOS?color=orange)](https://github.com/nathan237/TrustOS/releases)
 [![Sponsor](https://img.shields.io/github/sponsors/nathan237?color=ea4aaa&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/nathan237)
+[![YouTube](https://img.shields.io/badge/YouTube-trustos.tv237-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@trustos.tv237)
 [![Stars](https://img.shields.io/github/stars/nathan237/TrustOS?style=social)](https://github.com/nathan237/TrustOS/stargazers)
 
 <br/>
@@ -30,7 +31,7 @@ TrustOS is a **bare-metal operating system written from scratch in Rust** — no
 
 > One developer. ~264K lines of `no_std` Rust. AMD GPU brought up from zero. Audio synth + DAW running in the kernel.
 
-[**⬇ Download ISO**](https://github.com/nathan237/TrustOS/releases/latest) · [**🗺 Roadmap**](ROADMAP.md) · [**📜 Changelog**](CHANGELOG.md) · [**🤝 Contributing**](CONTRIBUTING.md)
+[**⬇ Download ISO**](https://github.com/nathan237/TrustOS/releases/latest) · [**🗺 Roadmap**](ROADMAP.md) · [**📜 Changelog**](CHANGELOG.md) · [**🤝 Contributing**](CONTRIBUTING.md) · [**▶ Watch on YouTube**](https://www.youtube.com/@trustos.tv237)
 
 ---
 
@@ -287,7 +288,10 @@ Patches welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first — kernel rule
 ## Author
 
 Built and maintained by **[Nathan](https://github.com/nathan237)** — solo.
-If TrustOS is useful or interesting to you, [become a sponsor](https://github.com/sponsors/nathan237).
+
+- 📺 **Watch the build** — devlogs, debug sessions, hardware bring-up: [youtube.com/@trustos.tv237](https://www.youtube.com/@trustos.tv237)
+- 💙 **Sponsor the work** — keeps the lights on and the boards spinning: [github.com/sponsors/nathan237](https://github.com/sponsors/nathan237)
+- ⭐ **Star the repo** if TrustOS is useful or interesting to you.
 
 ## License
 
