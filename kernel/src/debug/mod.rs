@@ -16,6 +16,7 @@ pub mod netconsole;
 pub mod remoteshell;
 
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 use alloc::format;
 use core::sync::atomic::{AtomicU8, AtomicU64, AtomicBool, Ordering};

@@ -187,7 +187,10 @@ unsafe fn mmio_wait(base: u64, offset: u32, mask: u32, value: u32, timeout_us: u
             return true;
         }
         // Rough microsecond delay via port 0x80 writes
+        #[cfg(target_arch = "x86_64")]
         core::arch::asm!("out 0x80, al", in("al") 0u8, options(nostack, preserves_flags));
+        #[cfg(not(target_arch = "x86_64"))]
+        core::hint::spin_loop();
     }
     false
 }

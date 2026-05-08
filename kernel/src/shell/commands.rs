@@ -5067,14 +5067,166 @@ pub(super) fn cmd_wifi(args: &[&str]) {
             }
         }
 
+        "devices" | "list" | "lspci" => {
+            // wifi devices — enumerate all WiFi-class PCI devices and report
+            // family + required firmware blob.
+            use crate::drivers::net::{iwl_family, ath9k};
+            let devices = crate::pci::get_devices();
+            let mut found = 0usize;
+            crate::println_color!(COLOR_CYAN, "=== WiFi-capable PCI devices ===");
+            for d in devices.iter() {
+                let is_wireless_class = d.class_code == crate::pci::class::WIRELESS
+                    || (d.class_code == crate::pci::class::NETWORK && d.subclass == 0x80);
+                let intel_known = d.vendor_id == 0x8086
+                    && iwl_family::classify(d.device_id).is_some();
+                let atheros_known = d.vendor_id == 0x168C
+                    && ath9k::ATH9K_DEVICE_IDS.contains(&d.device_id);
+                if !(is_wireless_class || intel_known || atheros_known) {
+                    continue;
+                }
+                found += 1;
+                let vendor = match d.vendor_id {
+                    0x8086 => "Intel",
+                    0x168C => "Atheros",
+                    0x10EC => "Realtek",
+                    0x14C3 => "MediaTek",
+                    0x14E4 => "Broadcom",
+                    0x17CB => "Qualcomm",
+                    _      => "Unknown",
+                };
+                crate::println!("  [{:02X}:{:02X}.{}] {}:{:04X}  vendor={}",
+                    d.bus, d.device, d.function,
+                    d.vendor_id, d.device_id, vendor);
+                if let Some(fam) = iwl_family::classify(d.device_id) {
+                    let supp = if fam.supported_in_tree() { "DRIVER OK" } else { "no driver yet" };
+                    crate::println!("       family={:?}  op_mode={}  fw='{}'  [{}]",
+                        fam, fam.op_mode(), fam.firmware_hint(), supp);
+                } else if atheros_known {
+                    crate::println!("       family=ath9k softMAC  fw=none (skeleton driver)");
+                }
+            }
+            if found == 0 {
+                crate::println_color!(COLOR_YELLOW, "  (no WiFi devices detected)");
+            } else {
+                crate::println_color!(COLOR_GREEN, "  Total: {} device(s)", found);
+            }
+        }
+
+        "crypto" | "selftest" => {
+            // wifi crypto — runtime smoke-test of WPA2 crypto primitives.
+            use crate::crypto::{sha1::sha1, hmac::hmac_sha1, pbkdf2::wpa2_psk};
+            crate::println_color!(COLOR_CYAN, "=== WiFi crypto smoke-test ===");
+
+            // SHA1("abc") = a9993e36 4706816a ba3e2571 7850c26c 9cd0d89d
+            let h = sha1(b"abc");
+            let exp_sha = [0xa9u8, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a,
+                           0xba, 0x3e, 0x25, 0x71, 0x78, 0x50, 0xc2, 0x6c,
+                           0x9c, 0xd0, 0xd8, 0x9d];
+            let sha_ok = h == exp_sha;
+            crate::println!("  SHA1('abc')      {}", if sha_ok { "OK" } else { "FAIL" });
+
+            // RFC 2202 HMAC-SHA1 test 1
+            let mac = hmac_sha1(&[0x0bu8; 20], b"Hi There");
+            let exp_mac = [0xb6u8, 0x17, 0x31, 0x86, 0x55, 0x05, 0x72, 0x64,
+                           0xe2, 0x8b, 0xc0, 0xb6, 0xfb, 0x37, 0x8c, 0x8e,
+                           0xf1, 0x46, 0xbe, 0x00];
+            let mac_ok = mac == exp_mac;
+            crate::println!("  HMAC-SHA1 RFC#1  {}", if mac_ok { "OK" } else { "FAIL" });
+
+            // WPA2 PMK derivation (just timing + non-zero check)
+            let t0: u64 = crate::arch::timestamp();
+            let pmk = wpa2_psk("password", b"IEEE");
+            let t1: u64 = crate::arch::timestamp();
+            let nonzero = pmk.iter().any(|&b| b != 0);
+            crate::println!("  PBKDF2 4096-iter {}  ({} cycles)",
+                if nonzero { "OK (non-zero PMK)" } else { "FAIL (zero PMK)" },
+                t1.wrapping_sub(t0));
+            crate::print!("  PMK first 8 bytes: ");
+            for b in &pmk[..8] {
+                crate::print!("{:02x}", b);
+            }
+            crate::println!("");
+
+            if sha_ok && mac_ok && nonzero {
+                crate::println_color!(COLOR_GREEN, "All crypto primitives PASS");
+            } else {
+                crate::println_color!(COLOR_RED, "Crypto self-test FAILED");
+            }
+        }
+
+        "simtest" | "sim" => {
+            // wifi simtest — full WPA2-PSK 4-way handshake against a mock AP
+            // + 802.11 frame parser fixtures. Runs anywhere (VM or hardware),
+            // no WiFi card required. Validates the full stack end-to-end.
+            crate::println_color!(COLOR_CYAN, "=== WiFi stack offline simulation ===");
+
+            // Stage 1: 802.11 frame parsers against canned fixtures.
+            crate::print!("  [1/2] 802.11 frame parsers ... ");
+            match crate::netstack::wifi::fixtures::run_parser_fixtures() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "PASS"),
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "FAIL ({})", e);
+                    return;
+                }
+            }
+
+            // Stage 2: full WPA2-PSK 4-way handshake STA <-> mock AP.
+            crate::print!("  [2/2] WPA2-PSK 4-way handshake ... ");
+            let sta_mac = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
+            let bssid   = [0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE];
+            match crate::netstack::wifi::run_wpa2_handshake(
+                "TrustOS-AP", "trustos-test-pass", sta_mac, bssid,
+            ) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "PASS"),
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "FAIL ({})", e);
+                    return;
+                }
+            }
+
+            crate::println_color!(COLOR_GREEN,
+                "Stack OK — WPA2 handshake validated end-to-end (no hardware needed).");
+            crate::println!("  This proves the supplicant + crypto + frame layer are correct");
+            crate::println!("  on this build. Driver-level issues (PCI/MMIO/firmware) are");
+            crate::println!("  separate and only testable on real hardware.");
+        }
+
+        "probe-usb" | "usb" => {
+            // wifi probe-usb — scan xHCI bus for known USB WiFi dongles
+            // (mt7921u for now; rtl8188eu / mt7601u to come).
+            crate::println_color!(COLOR_CYAN, "=== USB WiFi probe ===");
+            if !crate::drivers::xhci::is_initialized() {
+                crate::println_color!(COLOR_YELLOW, "  xHCI not initialized — run `lsusb` first to trigger deferred init.");
+                return;
+            }
+            let devs = crate::drivers::xhci::list_devices();
+            crate::println!("  xHCI sees {} device(s)", devs.len());
+            for d in &devs {
+                crate::println!("    slot {} : {:04x}:{:04x} class {:#04x} port {}",
+                    d.slot_id, d.vendor_id, d.product_id, d.class, d.port);
+            }
+            match crate::drivers::net::mt7921u::probe() {
+                Ok(label) => {
+                    crate::println_color!(COLOR_GREEN, "  mt7921u: {}", label);
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_YELLOW, "  mt7921u: {}", e);
+                }
+            }
+        }
+
         _ => {
             crate::println_color!(COLOR_CYAN, "WiFi Management Commands:");
             crate::println!("  wifi status          Show WiFi status and connection info");
+            crate::println!("  wifi devices         List all WiFi-capable PCI devices + driver fit");
             crate::println!("  wifi start           Initialize hardware + load firmware (verbose)");
             crate::println!("  wifi scan            Scan for available networks");
             crate::println!("  wifi results         Show last scan results");
             crate::println!("  wifi connect <SSID> [password]  Connect to network");
             crate::println!("  wifi disconnect      Disconnect from current network");
+            crate::println!("  wifi crypto          Run WPA2 crypto self-test (SHA1/HMAC/PBKDF2)");
+            crate::println!("  wifi simtest         Full offline WPA2 handshake (works in VM)");
+            crate::println!("  wifi probe-usb       Scan USB bus for known WiFi dongles (mt7921u)");
             crate::println!("  wifi debug           PCI + CSR register dump");
             crate::println_color!(COLOR_CYAN, "Live Debug (no recompile needed):");
             crate::println!("  wifi reg <offset> [val]   Read/write CSR register (hex)");

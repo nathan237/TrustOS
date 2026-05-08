@@ -616,6 +616,7 @@ pub fn compile_native(source: &str) -> Result<NativeProgram, String> {
 /// Execute a NativeProgram.
 /// SAFETY: This allocates executable memory and jumps to it.
 /// The builtin_callback bridges native code back to kernel builtins.
+#[cfg(target_arch = "x86_64")]
 pub unsafe fn execute_native(
     program: &NativeProgram,
     builtin_callback: BuiltinFn,
@@ -658,6 +659,14 @@ pub unsafe fn execute_native(
     free_executable_pages(exec_mem, code.len());
 
     Ok(result)
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub unsafe fn execute_native(
+    _program: &NativeProgram,
+    _builtin_callback: BuiltinFn,
+) -> Result<i64, String> {
+    Err(String::from("native execution unsupported on this arch"))
 }
 
 // ─── Executable memory allocation ───────────────────────────────────────

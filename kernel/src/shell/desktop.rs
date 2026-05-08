@@ -7547,7 +7547,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
             // Brief spin: ~100 iterations A-- ~100 cycles Eoe 30-50Aus at 3GHz
             for _ in 0..100 {
                 #[cfg(target_arch = "x86_64")]
-                core::arch::asm!("pause");
+                core::hint::spin_loop();
                 #[cfg(not(target_arch = "x86_64"))]
                 core::hint::spin_loop();
             }

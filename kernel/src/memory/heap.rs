@@ -228,7 +228,7 @@ unsafe impl GlobalAlloc for TrackedAllocator {
         }
 
         if trace_on && !ptr.is_null() {
-            let lat = (unsafe { core::arch::x86_64::_rdtsc() }.wrapping_sub(t0)) as u32;
+            let lat = (crate::arch::timestamp().wrapping_sub(t0)) as u32;
             let class = class_opt.map(|c| c as u8).unwrap_or(u8::MAX);
             #[cfg(feature = "jarvis")]
             crate::jarvis::trace::trace_alloc(
@@ -252,7 +252,7 @@ unsafe impl GlobalAlloc for TrackedAllocator {
             if unsafe { mag_free(idx, ptr) } {
                 crate::devtools::track_dealloc(layout.size());
                 if trace_on {
-                    let lat = (unsafe { core::arch::x86_64::_rdtsc() }.wrapping_sub(t0)) as u32;
+                    let lat = (crate::arch::timestamp().wrapping_sub(t0)) as u32;
                     #[cfg(feature = "jarvis")]
                     crate::jarvis::trace::trace_free(
                         layout.size() as u32, idx as u8, ptr as usize, lat,
@@ -267,7 +267,7 @@ unsafe impl GlobalAlloc for TrackedAllocator {
             unsafe { INNER.dealloc(ptr, cls_layout); }
             crate::devtools::track_dealloc(layout.size());
             if trace_on {
-                let lat = (unsafe { core::arch::x86_64::_rdtsc() }.wrapping_sub(t0)) as u32;
+                let lat = (crate::arch::timestamp().wrapping_sub(t0)) as u32;
                 #[cfg(feature = "jarvis")]
                 crate::jarvis::trace::trace_free(
                     layout.size() as u32, idx as u8, ptr as usize, lat,
@@ -280,7 +280,7 @@ unsafe impl GlobalAlloc for TrackedAllocator {
         unsafe { INNER.dealloc(ptr, layout); }
         crate::devtools::track_dealloc(layout.size());
         if trace_on {
-            let lat = (unsafe { core::arch::x86_64::_rdtsc() }.wrapping_sub(t0)) as u32;
+            let lat = (crate::arch::timestamp().wrapping_sub(t0)) as u32;
             #[cfg(feature = "jarvis")]
             crate::jarvis::trace::trace_free(
                 layout.size() as u32, u8::MAX, ptr as usize, lat,

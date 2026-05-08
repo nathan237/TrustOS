@@ -280,13 +280,18 @@ pub mod ed25519;
 
 // Synchronization primitives (Redox-inspired)
 mod sync;
-// POSIX signals
+// POSIX signals (x86_64 only — uses CpuContext register fields)
+#[cfg(target_arch = "x86_64")]
+mod signals;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/signals.rs"]
 mod signals;
 // TTY subsystem (line discipline, sessions)
 mod tty;
 // Pseudo-terminal (PTY) pairs
 mod pty;
-// Process tracing (debugging)
+// Process tracing (debugging) — x86_64 only
+#[cfg(target_arch = "x86_64")]
 mod ptrace;
 // Safe user/kernel memory copy
 mod usercopy;
@@ -1564,6 +1569,14 @@ pub unsafe extern "C" fn kmain() -> ! {
     #[cfg(feature = "coremark")]
     coremark::run();
 
+    // ── Headless VM self-test (CI / `qemu-selftest.ps1`) ─────────────
+    // Runs WiFi crypto + frame fixtures + WPA2 4-way handshake against
+    // the in-tree MockAccessPoint, prints a single PASS/FAIL marker on
+    // serial COM1 the host script can grep for, then continues to the
+    // shell as normal.
+    #[cfg(feature = "vm-selftest")]
+    vm_selftest();
+
     shell::run();
 }
 
@@ -1616,6 +1629,109 @@ fn jarvis_birth() {
 /// Used when kernel cannot continue or has nothing to do
 fn halt_loop() -> ! {
     arch::halt_loop()
+}
+
+/// Headless VM self-test — runs the WiFi stack offline harness and prints
+/// a single line on COM1 (`[VM-SELFTEST] PASS` or `[VM-SELFTEST] FAIL: …`)
+/// that the host-side `qemu-selftest.ps1` script greps for.
+///
+/// Does not panic on failure: the shell still starts so a developer who
+/// boots a `vm-selftest` build interactively can keep using it.
+#[cfg(feature = "vm-selftest")]
+fn vm_selftest() {
+    serial_println!("[VM-SELFTEST] start");
+
+    // Stage 1 — 802.11 frame parsers.
+    if let Err(e) = crate::netstack::wifi::fixtures::run_parser_fixtures() {
+        serial_println!("[VM-SELFTEST] FAIL: parsers: {}", e);
+        return;
+    }
+    serial_println!("[VM-SELFTEST] parsers ok");
+
+    // Stage 2 — WPA2-PSK 4-way handshake STA <-> mock AP, with CCMP roundtrip
+    // on the negotiated Temporal Key.
+    let sta_mac = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
+    let bssid   = [0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE];
+    if let Err(e) = run_wpa2_then_ccmp(sta_mac, bssid) {
+        serial_println!("[VM-SELFTEST] FAIL: handshake/ccmp: {}", e);
+        return;
+    }
+    serial_println!("[VM-SELFTEST] handshake ok");
+    serial_println!("[VM-SELFTEST] ccmp ok");
+
+    // Stage 3 — Standalone CCM round-trip + tamper detection.
+    if let Err(e) = ccmp_smoke_tests() {
+        serial_println!("[VM-SELFTEST] FAIL: ccmp-smoke: {}", e);
+        return;
+    }
+    serial_println!("[VM-SELFTEST] ccmp-smoke ok");
+
+    serial_println!("[VM-SELFTEST] PASS");
+}
+
+#[cfg(feature = "vm-selftest")]
+fn run_wpa2_then_ccmp(sta_mac: [u8; 6], bssid: [u8; 6]) -> Result<(), &'static str> {
+    use crate::netstack::wifi::mock_ap::MockAccessPoint;
+    use crate::netstack::wifi::supplicant::{Supplicant, AuthMethod};
+
+    let ssid = "TrustOS-AP";
+    let pass = "trustos-test-pass";
+
+    let mut ap = MockAccessPoint::new(ssid, bssid, pass);
+    let mut sta = Supplicant::new(
+        AuthMethod::Wpa2Psk,
+        alloc::string::String::from(ssid),
+        alloc::string::String::from(pass),
+        bssid,
+        sta_mac,
+    );
+    sta.start().map_err(|_| "supplicant.start")?;
+    let anonce = ap.build_msg1();
+    let msg2 = sta.handle_msg1(anonce).map_err(|_| "msg2 build")?;
+    let msg3 = ap.handle_msg2(sta_mac, &msg2).map_err(|_| "ap msg2")?;
+    let msg4 = sta.handle_msg3(&msg3).map_err(|_| "sta msg3")?;
+    ap.handle_msg4(&msg4).map_err(|_| "ap msg4")?;
+    if !sta.is_connected() { return Err("sta not connected"); }
+
+    // Both sides must have derived the same TK.
+    let sta_tk = sta.ptk().ok_or("sta no ptk")?.tk;
+    let ap_tk = *ap.tk().ok_or("ap no tk")?;
+    if sta_tk != ap_tk { return Err("TK mismatch"); }
+
+    // Encrypt a frame on STA side, decrypt on AP side using the negotiated TK.
+    let pn = [0u8, 0, 0, 0, 0, 1]; // PN = 1, big-endian
+    let nonce = crate::crypto::ccmp::build_ccmp_nonce(0, &sta_mac, &pn);
+    let aad = b"\x08\x41\x00\x00"; // dummy MAC header AAD
+    let payload = b"trustos -> ap (ccmp ok)";
+    let ct = crate::crypto::ccmp::ccm_encrypt(&sta_tk, &nonce, aad, payload)
+        .map_err(|_| "ccm encrypt")?;
+    let pt = crate::crypto::ccmp::ccm_decrypt(&ap_tk, &nonce, aad, &ct)
+        .map_err(|_| "ccm decrypt")?;
+    if pt.as_slice() != payload { return Err("decrypted payload mismatch"); }
+    Ok(())
+}
+
+#[cfg(feature = "vm-selftest")]
+fn ccmp_smoke_tests() -> Result<(), &'static str> {
+    use crate::crypto::ccmp::{ccm_encrypt, ccm_decrypt, CcmpError};
+
+    // Round-trip with arbitrary data.
+    let key = [0x42u8; 16];
+    let nonce = [0x10u8; 13];
+    let aad = b"hdr";
+    let pt = b"hello ccmp world";
+    let ct = ccm_encrypt(&key, &nonce, aad, pt).map_err(|_| "encrypt")?;
+    let dec = ccm_decrypt(&key, &nonce, aad, &ct).map_err(|_| "decrypt")?;
+    if dec.as_slice() != pt { return Err("plaintext mismatch"); }
+
+    // MIC tamper must be rejected.
+    let mut ct_bad = ct.clone();
+    let last = ct_bad.len() - 1;
+    ct_bad[last] ^= 0x01;
+    if !matches!(ccm_decrypt(&key, &nonce, aad, &ct_bad), Err(CcmpError::MicMismatch)) {
+        return Err("tamper not detected");
+    }
+    Ok(())
 }
 
 /// Auto-mount SSD and execute /mnt/sda1/autoexec.sh + load training.cfg

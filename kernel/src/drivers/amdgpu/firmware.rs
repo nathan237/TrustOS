@@ -61,7 +61,10 @@ use crate::memory;
 #[inline]
 fn gpu_udelay(us: u32) {
     for _ in 0..us {
+        #[cfg(target_arch = "x86_64")]
         unsafe { core::arch::asm!("out 0x80, al", in("al") 0u8, options(nostack, nomem)); }
+        #[cfg(not(target_arch = "x86_64"))]
+        core::hint::spin_loop();
     }
 }
 
@@ -1826,7 +1829,7 @@ fn polaris_sdma_full_init_mode(
         core::ptr::write_volatile(table.add(6), pte6);
         core::ptr::write_volatile(table.add(7), pte7);
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mfence", options(nostack, preserves_flags));
+        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         mmio_write32(mmio, POL_HDP_MEM_COHERENCY_FLUSH_CNTL, 1);
         let _ = mmio_read32(mmio, POL_HDP_MEM_COHERENCY_FLUSH_CNTL);
         crate::serial_println!("[SDMA] GART PTE0={:#X} PTE1={:#X} PTE2={:#X} PTE3={:#X} PTE4={:#X} PTE5(IH)={:#X} PTE6(CSA0)={:#X} PTE7(CSA1)={:#X}",

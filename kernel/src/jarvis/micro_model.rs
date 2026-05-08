@@ -419,9 +419,7 @@ fn check_heap() -> bool {
 
 fn check_interrupts() -> bool {
     // Verify interrupt flag is enabled
-    let flags: u64;
-    unsafe { core::arch::asm!("pushfq; pop {}", out(reg) flags); }
-    (flags & (1 << 9)) != 0 // IF bit
+    crate::arch::are_interrupts_enabled()
 }
 
 fn check_fs() -> bool {
@@ -430,9 +428,14 @@ fn check_fs() -> bool {
 
 fn check_serial() -> bool {
     // COM1 base port check
-    let status: u8;
-    unsafe { core::arch::asm!("in al, dx", out("al") status, in("dx") 0x3FDu16); }
-    status != 0xFF
+    #[cfg(target_arch = "x86_64")]
+    {
+        let status: u8;
+        unsafe { core::arch::asm!("in al, dx", out("al") status, in("dx") 0x3FDu16); }
+        status != 0xFF
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    { true }
 }
 
 /// Check if the full brain weights file exists in RamFS

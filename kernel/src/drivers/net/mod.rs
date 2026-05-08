@@ -81,18 +81,21 @@ mod virtio;
 // E1000 Driver Implementation (Intel NICs)
 // ============================================================================
 
+#[cfg(target_arch = "x86_64")]
 mod e1000;
 
 // ============================================================================
 // RTL8139 Driver Implementation (Realtek)
 // ============================================================================
 
+#[cfg(target_arch = "x86_64")]
 mod rtl8139;
 
 // ============================================================================
 // RTL8169/8168/8111 Gigabit Ethernet (Realtek)
 // ============================================================================
 
+#[cfg(target_arch = "x86_64")]
 mod rtl8169;
 
 // ============================================================================
@@ -103,6 +106,7 @@ pub mod wifi;
 pub mod iwl4965;
 pub mod iwl_family;
 pub mod ath9k;
+pub mod mt7921u;
 
 // ============================================================================
 // Public API
@@ -111,9 +115,12 @@ pub mod ath9k;
 /// Register all network drivers
 pub fn register_drivers() {
     virtio::register();
-    e1000::register();
-    rtl8139::register();
-    rtl8169::register();
+    #[cfg(target_arch = "x86_64")]
+    {
+        e1000::register();
+        rtl8139::register();
+        rtl8169::register();
+    }
 }
 
 /// Register a network driver factory

@@ -1291,7 +1291,7 @@ pub fn dump_vram_regs() -> Vec<String> {
 
             // ── 2. Page Table Flags Check ──
             let cr3: u64;
-            core::arch::asm!("mov {}, cr3", out(reg) cr3);
+            cr3 = crate::arch::read_page_table_root();
             let hhdm = crate::memory::hhdm_offset();
             let pml4 = &*((cr3 + hhdm) as *const [u64; 512]);
             let pml4_idx = ((mmio >> 39) & 0x1FF) as usize;
@@ -1332,13 +1332,13 @@ pub fn dump_vram_regs() -> Vec<String> {
 
             // ── 4. Index register readback verification ──
             mmio_write32(mmio, regs::PCIE_INDEX2, 0x12345678);
-            core::arch::asm!("mfence", options(nostack, preserves_flags));
+            core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
             let idx2_rb = mmio_read32(mmio, regs::PCIE_INDEX2);
             lines.push(format!("PCIE_IDX2 w/r: wrote 0x12345678 read {:#010X} {}",
                 idx2_rb, if idx2_rb == 0x12345678 { "OK" } else { "FAIL" }));
 
             mmio_write32(mmio, regs::MM_INDEX, 0xABCD_0000);
-            core::arch::asm!("mfence", options(nostack, preserves_flags));
+            core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
             let mmidx_rb = mmio_read32(mmio, regs::MM_INDEX);
             lines.push(format!("MM_INDEX w/r: wrote 0xABCD0000 read {:#010X} {}",
                 mmidx_rb, if mmidx_rb == 0xABCD_0000 { "OK" } else { "FAIL" }));

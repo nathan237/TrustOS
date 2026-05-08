@@ -660,9 +660,9 @@ fn main() {
             // Compare with bytecode VM
             crate::println!("  Computing fib(25) via bytecode VM...");
             let vm_src = "fn fib(n: i64) -> i64 { if n <= 1 { return n; } return fib(n - 1) + fib(n - 2); } fn main() { let r = fib(25); println(to_string(r)); }";
-            let start = unsafe { core::arch::x86_64::_rdtsc() };
+            let start = crate::arch::timestamp();
             let _ = crate::trustlang::run(vm_src);
-            let end = unsafe { core::arch::x86_64::_rdtsc() };
+            let end = crate::arch::timestamp();
             let vm_cycles = end - start;
             crate::println!("  VM Cycles: {} (~{} µs @ 3GHz)", vm_cycles, vm_cycles / 3000);
             if vm_cycles > 0 {

@@ -5939,7 +5939,7 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                         mmio_write32(mmio, POL_VM_INVALIDATE_REQUEST, 0xFFFF_FFFF);
                     }
                     let post1 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
-                    for _ in 0..1000 { unsafe { core::arch::asm!("pause") }; }
+                    for _ in 0..1000 { core::hint::spin_loop(); }
                     let post2 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
                     // restore CTX0 enable bit
                     unsafe { crate::drivers::amdgpu::mmio_write32(mmio, POL_VM_CTX0_CNTL, ctx_pre); }
@@ -6041,7 +6041,7 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                             mmio_write32(mmio, POL_VM_CTX0_PF_STATUS, pf0);
                         }
                     }
-                    for _ in 0..2000 { unsafe { core::arch::asm!("pause") }; }
+                    for _ in 0..2000 { core::hint::spin_loop(); }
                     let pf1 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
                     let cur2 = unsafe { mmio_read32(mmio, POL_VM_CTX0_CNTL) };
                     crate::println!("CTX0 {:#010X} -> {:#010X}", cur, cur2);

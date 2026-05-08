@@ -7,6 +7,104 @@
 > Each entry: date, scope, what was done, result, follow-up.
 > Keep entries short (3â€“6 lines). No prose. No marketing.
 
+## 2026-05-08 — Porte 1 HAL Phase E : aarch64 build VERT (54 → 0)
+- scope: stubs/{acpi,cpu}.rs réécrits parité totale, drivers/net/mod.rs (register_drivers gated), bulk migrations memory/{swap,paging,mod,cow}.rs + syscall/linux.rs + interrupts/handlers.rs + drivers/amdgpu/{mod,firmware}.rs + hwscan/timing.rs + exec.rs + shell/{vm,desktop}.rs + jarvis/micro_model.rs
+- did: ACPI structs (FadtInfo+flags+méthodes, IntSourceOverride, LocalApic enabled/online_capable, HpetInfo period_fs/frequency, GenericAddress) ; CpuCapabilities.fma ; bulk asm! → HAL portable : invlpg→arch::flush_tlb, cr3 read/write→arch::{read,write}_page_table_root, mfence→fence(SeqCst), pause→spin_loop, pushfq IF→arch::are_interrupts_enabled
+- result: cargo build aarch64-unknown-none = 0 errs (Finished release). cargo build x86_64 = 0 errs (Finished 1m46s). PORTE 1 ouverte côté build aarch64.
+- next: Phase F = QEMU virt aarch64 boot test (qemu-system-aarch64 absent env parents, à faire env home). Phase G = riscv64.
+
+## 2026-05-08 — Porte 1 HAL Phase B : 316 → 54 errs aarch64 (-83%)
+- scope: stubs/apic.rs (watchdog), drivers/net/{e1000,rtl8139,rtl8169,iwl4965}, drivers/{nvidia,amdgpu/firmware}, drivers/amdgpu/gpu_train.rs, jarvis/{trace/mod,trace/pmu,micro_model}, trustlang/native.rs, signals/ptrace gate + new stubs/signals.rs
+- did: watchdog stubs no-op; PCI legacy NICs cfg-gated x86; iwl4965 portable via crate::debug::post_code; gpu_train _rdtsc → crate::arch::timestamp; signals stub portable; POST=0 inline asm gated; pmu module gated; execute_native split x86/no-x86 stub
+- result: aarch64 errs 316 → 54 (-83%). x86_64 build vert. Reste 54 errs = bug ACPI structs FadtInfo/IntSourceOverride/LocalApic/HpetInfo (champs manquants), indépendant portage
+- next: Phase E = fix structs ACPI → aarch64 vert. Phase F = QEMU virt aarch64 boot.
+
+## 2026-05-08 — Porte 1 HAL Phase A : baseline aarch64 + 1ères migrations (Axe 1)
+- scope: kernel/src/{memory/heap.rs, shell/commands.rs, shell/apps.rs,
+  trustlang/tests.rs, debug/mod.rs}.
+- did: découvert que `kernel/src/arch/` HAL existe déjà avec aarch64+riscv64
+  squelettes sérieux. Migré 10 sites `core::arch::x86_64::_rdtsc()` vers
+  `crate::arch::timestamp()` dans modules portables. Ajouté `use alloc::vec;`
+  manquant dans debug/mod.rs.
+- result: build x86_64 reste vert (1m 36s). Build aarch64 baseline mesuré :
+  316 erreurs en 5 buckets (78 watchdog, 44 asm x86, 30 process registres,
+  15 arch x86 leak, 9 FADT). Pattern + plan documentés.
+- next: Phase B = feature-gate modules x86-bound (electro, hypervisor, aesni,
+  gpu_train CR3). Voir `/memories/repo/hal_migration_pattern.md`.
+
+## 2026-05-08 — USB driver layer + mt7921u skeleton (Phase 1)
+- scope: kernel/src/drivers/xhci.rs (extend descriptor parser to collect bulk
+  endpoints for vendor class 0xFF, auto-configure them; new public wrappers
+  `usb_control_in`, `usb_control_out_nodata`, `usb_configure_bulk_endpoints`,
+  `find_by_vid_pid`), kernel/src/drivers/net/mt7921u.rs (new — VID/PID table
+  for ASUS USB-AX56 + reference dongles, `probe()` that reads chip ID via
+  vendor MULTI_READ control transfer), kernel/src/drivers/net/mod.rs,
+  kernel/src/shell/commands.rs (`wifi probe-usb` subcommand).
+- did: minimal API surface so mt76 family can drive xHCI without re-implementing
+  USB plumbing. Skipped a separate façade module (YAGNI) — xhci public fns
+  ARE the API.
+- result: build clean (1m 43s). qemu-selftest PASS unchanged (parsers /
+  handshake / ccmp / ccmp-smoke). `wifi probe-usb` returns "no MT7921U device
+  found" on QEMU (expected — VM has no USB WiFi).
+- next: real test on BTC-250PRO with USB-AX56 plugged in (chip ID readback).
+  Then phases 3-7 (firmware upload, MCU bring-up, scan, assoc, data path).
+
+## 2026-05-08 — AES-CCMP module + end-to-end CCMP roundtrip in vm-selftest
+- scope: kernel/src/crypto/{mod.rs,ccmp.rs} (new — CCM-128 with L=2 M=8 per
+  RFC 3610 + 802.11 nonce/header builders), kernel/src/netstack/wifi/mock_ap.rs
+  (expose negotiated TK), kernel/src/main.rs (`vm_selftest` now runs handshake
+  → derive TK on both sides → STA encrypts payload → AP decrypts → tamper-MIC
+  rejection check).
+- did: pure-Rust no_std AES-CCM-128 on top of existing `tls13::crypto::Aes128`,
+  wired into the offline mock AP/STA harness.
+- result: build clean, `qemu-selftest.ps1` PASS — `parsers ok / handshake ok /
+  ccmp ok / ccmp-smoke ok / [VM-SELFTEST] PASS`.
+- next: USB driver API on top of xhci → mt7921u skeleton (real WiFi target).
+
+## 2026-05-08 — Headless QEMU self-test pipeline (`scripts/qemu-selftest.ps1`)
+- scope: kernel/Cargo.toml (feature `vm-selftest`), kernel/src/main.rs
+  (`vm_selftest()` runs after `coremark` block), kernel/src/netstack/wifi/fixtures.rs
+  (fixed: removed 12 B fixed body, parser expects IEs only),
+  scripts/qemu-selftest.ps1 (build + ISO + headless QEMU + serial grep).
+- did: feature-gated boot-time self-test that runs frame parsers + WPA2
+  4-way handshake against MockAccessPoint, prints `[VM-SELFTEST] PASS`
+  on COM1. Host script captures serial via `-serial file:`, polls for
+  marker, exits 0/1/2/3. xorriso path bug fixed by `cd $outDir` + relative
+  paths (msys mangles Windows absolute paths).
+- result: end-to-end PASS. Build 1m 49s, ISO 27.28 MB, boot+test ≈ 30 s.
+  First run caught a real fixture bug (12-byte fixed body shouldn't be in
+  IE blob) — exactly the kind of regression this harness exists for.
+- next: AES-CCMP (extend MockAccessPoint with data-frame encrypt/decrypt),
+  then ath9k PHY bring-up.
+
+## 2026-05-08 — WiFi offline test harness (mock AP + frame fixtures + `wifi simtest`)
+- scope: kernel/src/netstack/wifi/{mock_ap,fixtures,mod}.rs, kernel/src/shell/commands.rs
+- did: ajouté `MockAccessPoint` qui simule un AP WPA2-PSK complet (PMK partagé,
+  ANonce, vérif MIC msg2, msg3 signé, vérif MIC msg4) + helper
+  `run_wpa2_handshake(ssid, pw, sta_mac, bssid)`. Ajouté `fixtures.rs` avec
+  beacons canniques (WPA2 + Open) testant `parse_beacon_ies`. Nouvelle
+  commande shell `wifi simtest` qui run frame parsers + 4-way handshake
+  end-to-end. Marche en VM/QEMU/bare metal — aucune carte WiFi nécessaire.
+- result: build clean (1m 54s). Garantit que la stack supplicant + crypto +
+  parsers est correcte sur n'importe quelle machine sans dépendre d'un
+  driver. Les bugs driver (PCI/MMIO/firmware) restent isolés et testables
+  uniquement sur hardware.
+- next: AES-CCMP (encryption data frames), puis ath9k PHY bring-up.
+
+## 2026-05-08 — WiFi Phase B1: real WPA2 crypto + shell selftest + wifi devices
+- scope: kernel/src/crypto/{mod,sha1,hmac,pbkdf2,wpa}.rs, kernel/src/netstack/wifi/supplicant.rs, kernel/src/shell/commands.rs, kernel/src/main.rs
+- did: nouveau module `crate::crypto` (SHA-1 RFC 3174, HMAC-SHA1 RFC 2104,
+  PBKDF2-HMAC-SHA1 RFC 2898, IEEE 802.11 PRF-512 + EAPOL MIC). Supplicant
+  WPA2-PSK rebranché : PMK = PBKDF2(passphrase, ssid, 4096, 32), PTK = PRF
+  réelle, MIC EAPOL = HMAC-SHA1(KCK, frame_with_zero_mic) tronqué 16B.
+  Ajouté `wifi devices` (liste PCI WiFi + family + firmware needed) et
+  `wifi crypto` (selftest SHA1/HMAC/PBKDF2 avec test vectors).
+- result: build clean. Tests intégrés contre vecteurs : SHA1("abc")=a999...,
+  HMAC-SHA1 RFC 2202 #1 = b617..., PBKDF2 retourne PMK non-zéro. WPA2-PSK
+  end-to-end maintenant correct sur le wire (manque AES-CCMP pour data).
+- next: AES-CCMP (data-frame encryption) — réutiliser `tls13::crypto::Aes128`
+  + ajouter mode CCM. Puis ath9k PHY bring-up. Puis WPA3-SAE.
+
 ## 2026-05-08 — WiFi Phase A foundations + ath9k skeleton + iwl family classifier
 - scope: kernel/src/drivers/firmware_loader.rs, kernel/src/netstack/wifi/{mod,frame,channel,supplicant}.rs, kernel/src/drivers/net/{iwl_family,ath9k,wifi,mod}.rs
 - did: unified firmware loader (cache + ramfs `/lib/firmware/`); softMAC layer

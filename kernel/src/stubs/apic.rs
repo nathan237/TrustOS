@@ -41,3 +41,8 @@ pub fn is_enabled() -> bool {
 }
 pub fn ticks_per_ms() -> u64 { 0 }
 pub fn route_pci_irq(_irq: u8, _vector: u8) {}
+
+// Watchdog stubs — no-op on non-x86 (real impl in kernel/src/apic.rs uses APIC timer).
+pub fn watchdog_arm(_timeout_ms: u64) {}
+pub fn watchdog_disarm() {}
+pub fn watchdog_kick(_timeout_ms: u64) {}

@@ -258,7 +258,7 @@ impl AddressSpace {
         // Invalidate TLB for this virtual address
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
+            crate::arch::flush_tlb(virt);
         }
         
         Some(())
@@ -309,7 +309,7 @@ impl AddressSpace {
         // Invalidate TLB for this page
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
+            crate::arch::flush_tlb(virt);
         }
         
         Some(())
@@ -667,7 +667,7 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
             // Flush TLB for entire 1GB region
             let base_virt = (virt >> 30) << 30;
             for i in (0..0x4000_0000u64).step_by(0x200000) {
-                unsafe { core::arch::asm!("invlpg [{}]", in(reg) base_virt + i, options(nostack, preserves_flags)); }
+                crate::arch::flush_tlb(base_virt + i);
             }
             unsafe { &mut *(pd_virt as *mut PageTable) }
         } else {
@@ -710,7 +710,7 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
             // Flush TLB for 2MB region
             let base_virt = (virt >> 21) << 21;
             for i in (0..0x200000u64).step_by(0x1000) {
-                unsafe { core::arch::asm!("invlpg [{}]", in(reg) base_virt + i, options(nostack, preserves_flags)); }
+                crate::arch::flush_tlb(base_virt + i);
             }
             unsafe { &mut *(pt_virt as *mut PageTable) }
         } else {
@@ -884,7 +884,7 @@ pub fn remap_region_write_combining(virt_start: u64, size_bytes: usize) -> Resul
         // Invalidate this TLB entry
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
+            crate::arch::flush_tlb(virt);
         }
         
         remapped += 1;

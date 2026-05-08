@@ -433,9 +433,9 @@ pub fn bench_fibonacci() -> (i64, u64) {
     };
 
     // Time the execution
-    let start = unsafe { core::arch::x86_64::_rdtsc() };
+    let start = crate::arch::timestamp();
     let result = unsafe { super::native::execute_native(&prog, dummy_builtin) }.unwrap_or(0);
-    let end = unsafe { core::arch::x86_64::_rdtsc() };
+    let end = crate::arch::timestamp();
 
     (result, end - start)
 }

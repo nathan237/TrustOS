@@ -400,7 +400,7 @@ pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset:
     // Record the VMA for demand paging
     let cr3: u64;
     #[cfg(target_arch = "x86_64")]
-    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    { cr3 = crate::arch::read_page_table_root(); }
     #[cfg(not(target_arch = "x86_64"))]
     { cr3 = 0; }
     
@@ -435,7 +435,7 @@ pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     // Remove VMA tracking
     let cr3: u64;
     #[cfg(target_arch = "x86_64")]
-    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    { cr3 = crate::arch::read_page_table_root(); }
     #[cfg(not(target_arch = "x86_64"))]
     { cr3 = 0; }
     crate::memory::vma::remove_vma_range(cr3, start, start + aligned_length);
@@ -505,8 +505,7 @@ pub fn sys_mprotect(addr: u64, length: u64, prot: u64) -> i64 {
             
             let phys = pt.entries[pt_idx].phys_addr();
             pt.entries[pt_idx].set(phys, new_flags);
-            #[cfg(target_arch = "x86_64")]
-            unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags)); }
+            crate::arch::flush_tlb(virt);
         }
     });
     

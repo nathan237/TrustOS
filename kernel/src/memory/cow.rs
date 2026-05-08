@@ -105,7 +105,7 @@ pub fn handle_cow_fault(fault_addr: u64) -> bool {
     }
 
     // Flush TLB entry
-    unsafe { core::arch::asm!("invlpg [{}]", in(reg) page_addr, options(nostack, preserves_flags)); }
+    crate::arch::flush_tlb(page_addr);
     true
     } // end cfg x86_64
 }

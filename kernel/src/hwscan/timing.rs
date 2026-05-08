@@ -101,7 +101,7 @@ fn measure_access_time(addr: u64, iterations: usize) -> (u64, u64, u64) {
         }
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("mfence", options(nomem, nostack));
+            core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         }
         #[cfg(target_arch = "riscv64")]
         unsafe {
@@ -123,7 +123,7 @@ fn measure_access_time(addr: u64, iterations: usize) -> (u64, u64, u64) {
         }
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::asm!("mfence", options(nomem, nostack));
+            core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         }
         #[cfg(target_arch = "riscv64")]
         unsafe {

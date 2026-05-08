@@ -419,10 +419,7 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
     unsafe {
         // Save kernel CR3
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
         
         // Publish process context for syscall / page-fault handlers
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
@@ -577,10 +574,7 @@ pub fn exec_test_program() -> ExecResult {
     // Switch to user address space and execute in Ring 3
     unsafe {
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
         
         // Publish process context
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
@@ -851,10 +845,7 @@ pub fn exec_memtest() -> ExecResult {
 
     unsafe {
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
 
         // Publish process context
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
@@ -1028,10 +1019,7 @@ pub fn exec_pipe_test() -> ExecResult {
 
     unsafe {
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
 
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
@@ -1104,10 +1092,7 @@ pub fn exec_exception_safety_test() -> ExecResult {
 
     unsafe {
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
         CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
@@ -1230,10 +1215,7 @@ pub fn exec_signal_test() -> ExecResult {
     let exit_code;
     unsafe {
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
         CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
@@ -1351,10 +1333,7 @@ pub fn exec_stdio_test() -> ExecResult {
     let exit_code;
     unsafe {
         let kernel_cr3: u64;
-        #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
-        #[cfg(not(target_arch = "x86_64"))]
-        { kernel_cr3 = crate::arch::read_page_table_root(); }
+        kernel_cr3 = crate::arch::read_page_table_root();
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
         CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);

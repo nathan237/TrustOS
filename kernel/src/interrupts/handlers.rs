@@ -63,7 +63,7 @@ pub extern "x86-interrupt" fn page_fault_handler(
     // ── Swap: check if page was swapped out ──
     if is_user_fault && !is_protection {
         let cr3: u64;
-        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+        { cr3 = crate::arch::read_page_table_root(); }
         if crate::memory::swap::handle_swap_fault(cr3, fault_addr) {
             return; // Page swapped back in — resume
         }
@@ -84,7 +84,7 @@ pub extern "x86-interrupt" fn page_fault_handler(
         
         // Check if address is in a VMA (mmap'd region)
         let cr3_val: u64;
-        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_val, options(nostack, preserves_flags)); }
+        { cr3_val = crate::arch::read_page_table_root(); }
         let vma = crate::memory::vma::lookup_vma(cr3_val, fault_addr);
         
         if in_heap || in_stack || vma.is_some() {
