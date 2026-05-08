@@ -37,8 +37,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Show toolchain
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+
       - name: Build (release)
-        run: cargo build --release -p trustos_kernel
+        run: cargo build --release -p trustos_kernel --verbose 2>&1 | tee build.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
 
       - name: Upload kernel binary
         uses: actions/upload-artifact@v4
