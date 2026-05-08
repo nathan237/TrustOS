@@ -21,6 +21,14 @@
 
 <sub><i>Live monitor: TrustOS bringing up an AMD RX 580X (Polaris 10) on a BTC-250PRO board — GMC, VM, SDMA firmware, ring buffer, all from scratch in <code>no_std</code> Rust.</i></sub>
 
+<br/><br/>
+
+<a href="https://www.youtube.com/shorts/rvkOIVT27BU">
+  <img src="https://img.youtube.com/vi/rvkOIVT27BU/hqdefault.jpg" alt="Watch the latest TrustOS short on YouTube" width="360"/>
+</a>
+
+<sub><i>▶ <a href="https://www.youtube.com/@trustos.tv237">Featured short — watch on YouTube</a></i></sub>
+
 </div>
 
 ---
