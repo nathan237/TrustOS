@@ -17,6 +17,16 @@
 
 ---
 
+## What is TrustOS?
+
+TrustOS is a **bare-metal operating system written from scratch in Rust** — no Linux, no Mesa, no libc, no binary blobs. It boots on real hardware (laptops, mining boards, QEMU) and exposes everything underneath: PCI, MSRs, ACPI, GPU registers, audio codecs. Debug it remotely over UDP from any laptop.
+
+> One developer. ~264K lines of `no_std` Rust. AMD GPU brought up from zero. Audio synth + DAW running in the kernel.
+
+[**⬇ Download ISO**](https://github.com/nathan237/TrustOS/releases/latest) · [**🗺 Roadmap**](ROADMAP.md) · [**📜 Changelog**](CHANGELOG.md) · [**🤝 Contributing**](CONTRIBUTING.md)
+
+---
+
 ## Why TrustOS?
 
 - **🦀 100% Rust, `no_std`** — zero C, zero binary blobs, `unsafe` only at MMIO boundaries.
@@ -30,11 +40,14 @@
 
 ## What's new — v0.12.0 "Audio Edition" (April 2026)
 
-TrustOS ships its first **music-focused edition**: a bare-metal `no_std` audio stack with synthesizer, DAW, sequencer, live coding, and a stack of effects — all running directly on hardware, no Linux, no PulseAudio, no JACK.
+A bare-metal `no_std` audio stack: **Intel HDA driver**, **8-voice polyphonic synth** (sine/square/saw/tri/noise + ADSR), **effects rack** (SVF filter / delay / distortion / tremolo / vibrato), **pattern sequencer**, full **TrustDAW** with piano roll + WAV export, and **Strudel-style live coding** — all running directly on hardware.
 
-→ Download: [**`trustos-audio.iso`**](https://github.com/nathan237/TrustOS/releases/latest) (Releases page) — boots on real hardware via USB (Rufus / DD mode) or QEMU.
+→ Download: [**`trustos-audio.iso`**](https://github.com/nathan237/TrustOS/releases/latest) · Devlog: [`docs/AUDIO_SYNTH_ROADMAP.md`](docs/AUDIO_SYNTH_ROADMAP.md)
 
-### What's inside the Audio Edition
+<details>
+<summary><b>Detailed feature list & shell commands</b></summary>
+
+### What's inside
 
 - **Intel HDA driver** — `no_std`, CORB/RIRB, codec discovery, BDL DMA, 48 kHz / 16-bit stereo. Tested on ThinkPad T61 (AD1984).
 - **TrustSynth** — polyphonic synthesizer engine
@@ -86,11 +99,12 @@ TrustOS ships its first **music-focused edition**: a bare-metal `no_std` audio s
 # → builds\trustos-audio\trustos-audio.iso
 ```
 
-→ Devlog: [`docs/AUDIO_SYNTH_ROADMAP.md`](docs/AUDIO_SYNTH_ROADMAP.md)
+</details>
 
 ---
 
-## Previously — v0.11.0 (April 2026)
+<details>
+<summary><h2 style="display:inline-block">Previously — v0.11.0 (April 2026)</h2></summary>
 
 Bare-metal AMD GPU bring-up, working audio on real laptops, protected userland, and a full hardware diagnostics suite.
 
@@ -114,6 +128,8 @@ From-scratch AMD driver in pure `no_std` Rust on an RX 580X (Polaris 10). Ring b
 - **Security audit** — preemptive cross-OS vulnerability sweep
 
 → Full history: [`CHANGELOG.md`](CHANGELOG.md)
+
+</details>
 
 ---
 
