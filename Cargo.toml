@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "kernel",
-    "debugonly",
     "userland/trustos-syscall",
     "userland/init",
     "userland/hello-rust",
@@ -13,6 +12,7 @@ members = [
     "userland/compositor",
 ]
 exclude = [
+    "debugonly",
     "sdk",
     "sdk/trustos-rt",
     "sdk/examples/hello",
