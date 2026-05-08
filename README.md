@@ -16,7 +16,9 @@
 
 <br/>
 
-<img src="media/screenshots/screen_showcase.png" alt="TrustOS running on real hardware" width="880"/>
+<img src="docs/images/gpu_amd_sdma_validated.png" alt="TrustOS live monitor — AMD RX 580X SDMA validated on bare metal" width="880"/>
+
+<sub><i>Live monitor: TrustOS bringing up an AMD RX 580X (Polaris 10) on a BTC-250PRO board — GMC, VM, SDMA firmware, ring buffer, all from scratch in <code>no_std</code> Rust.</i></sub>
 
 </div>
 
