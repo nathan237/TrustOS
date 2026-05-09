@@ -8,7 +8,7 @@ Updated: 2026-05-09
 - Storage disk: `D:` label `storage` on ADATA SU655 SATA 120GB, healthy, ~77 GB free after cleanup.
 - Current TrustOS repo: `C:\Users\nathan\Documents\Scripts\OSrust` (~26 GB).
 - Current D: mirror source tree was removed; retained only `D:\TrustOS_SafeMirror\_logs`, `_disk_health`, and `D:\TrustOS_Scripts\OSrust` scripts/memory snapshot (~1.5 MB).
-- WSL Debian exists and is stopped by default; its VHDX is currently on `C:\Users\nathan\AppData\Local\wsl\{c556302d-3f0e-4e89-83d2-ec5eeae0c2fd}\ext4.vhdx` (~397 MB now, but it grows on C:). `/home` is currently empty/minimal.
+- WSL `Debian-TrustOS` is now default and lives on ADATA at `D:\WSL\Debian-TrustOS\ext4.vhdx`; old `Debian` remains on C: as fallback.
 
 ## Recovery state
 
@@ -26,7 +26,7 @@ Updated: 2026-05-09
   - hub launchers, scheduled tasks, emergency repair scripts, tiny wrappers.
 - Move project source/data workspace off cramped `C:` after recovery is clean:
   - preferred source workspace: Linux/WSL native filesystem for Codex autonomy.
-  - ADATA role: scripts/logs only. Do not use it as authoritative source mirror unless rebuilt from a clean clone.
+  - ADATA role: scripts/logs + WSL work distro. Do not use the old mirror as authoritative source. Rebuild source from GitHub plus manually verified local files.
 - Keep backups versioned, not only robocopy/zip:
   - GitHub branch for source.
   - D: mirror for fast local copy.
@@ -48,4 +48,10 @@ Updated: 2026-05-09
 - Do not delete `.git.corrupt.20260509`, `.recovery_workspace`, or `*.corrupt.20260509` until GitHub + D: + WSL + external/offsite copies are verified.
 - Do not overwrite files from `.partial` recovery candidates without manual review.
 
+
+
+## Admin Runbook
+
+- Reusable command/script record: D:\TrustOS_Admin_Runbook.
+- Compact scripts snapshot: D:\TrustOS_Scripts\OSrust.
 

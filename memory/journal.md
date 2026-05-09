@@ -7,7 +7,11 @@
 > Each entry: date, scope, what was done, result, follow-up.
 > Keep entries short (3â€“6 lines). No prose. No marketing.
 
-## 2026-05-09 - ADATA cleanup: scripts only retained
+## 2026-05-09 - Debian-TrustOS WSL moved to ADATA + admin runbook
+- scope: WSL/storage autonomy + reusable command record.
+- did: exported old `Debian`, imported `Debian-TrustOS` on `D:\WSL\Debian-TrustOS`, set as default, installed Linux dev tools + Rust nightly + TrustOS targets, cloned `recovery/post-crash-20260509` to `~/work/TrustOS`.
+- result: environment lives on ADATA and is usable; command recueil created at `D:\TrustOS_Admin_Runbook`; `cargo check -p trustos_kernel` fails because GitHub branch is missing local-only modules/assets still trapped in old Windows working tree.
+- next: source-of-truth cleanup: copy/commit only proven non-null required files from Windows working tree; do not bulk-copy the corrupted tree into Linux.## 2026-05-09 - ADATA cleanup: scripts only retained
 - scope: `D:` ADATA storage cleanup after recovery audit.
 - did: copied a strict script/memory subset to `D:\TrustOS_Scripts\OSrust` (155 files, ~1.5 MB); removed oversized `D:\TrustOS_SafeMirror\Documents_Scripts` mirror (~54.9 GB).
 - result: `D:` now has ~77 GB free; kept `D:\TrustOS_SafeMirror\_logs`, `_disk_health`, and `D:\TrustOS_Scripts`; did not touch `D:\SteamLibrary`.
@@ -1085,5 +1089,6 @@
 - did: consolidated Claude + Copilot instructions into single source of truth; added Le Pacte, debug workflow, "done" criteria, journal rule
 - result: any AI reading AGENTS.md gets full setup; wrappers still live but secondary
 - next: optionally reduce CLAUDE.md / copilot-instructions.md to pure pointers
+
 
 
