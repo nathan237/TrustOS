@@ -7,7 +7,15 @@
 > Each entry: date, scope, what was done, result, follow-up.
 > Keep entries short (3â€“6 lines). No prose. No marketing.
 
-## 2026-05-08 — Porte 1 HAL Phase G : riscv64 build VERT (premier essai)
+## 2026-05-09 - ADATA cleanup: scripts only retained
+- scope: `D:` ADATA storage cleanup after recovery audit.
+- did: copied a strict script/memory subset to `D:\TrustOS_Scripts\OSrust` (155 files, ~1.5 MB); removed oversized `D:\TrustOS_SafeMirror\Documents_Scripts` mirror (~54.9 GB).
+- result: `D:` now has ~77 GB free; kept `D:\TrustOS_SafeMirror\_logs`, `_disk_health`, and `D:\TrustOS_Scripts`; did not touch `D:\SteamLibrary`.
+- next: use ADATA for scripts/logs only; rebuild any future source workspace from GitHub/clean WSL, not from the old D: mirror.## 2026-05-09 - Recovery audit + storage migration plan
+- scope: Windows Search repair, TrustOS post-crash recovery audit, D: storage/WSL inventory.
+- did: restored WSearch ACLs + Start Menu cmd/PowerShell links; ran recovery audit; restored 10 complete non-null files from `.recovery_workspace\found`; verified Git fsck active objects clean.
+- result: branch `recovery/post-crash-20260509` pushed; `git fsck --full` only dangling objects; 76 active untracked source/doc/script files remain all-zero and D: mirror has no better copies; `trustos_minimal.zip` is not a trusted ZIP backup.
+- next: do not trust D: mirror as source of truth yet. Migrate source to storage environment only after clean source set is rebuilt; keep Windows C: for launch/recovery scripts; create Linux/WSL autonomous workspace + versioned backup.## 2026-05-08 — Porte 1 HAL Phase G : riscv64 build VERT (premier essai)
 - scope: rustup target add riscv64gc-unknown-none-elf ; cargo build --release -p trustos_kernel --target riscv64gc-unknown-none-elf
 - did: zero migration nécessaire — tous les stubs/cfg gates des phases A+B+E couvraient déjà riscv64 via `#[cfg(not(target_arch = "x86_64"))]`
 - result: 0 errs, ELF 12.4 MB, 1m23s. **3 arches verts simultanément** : x86_64 + aarch64 + riscv64. Porte 1 = 100% côté build.
@@ -1077,3 +1085,5 @@
 - did: consolidated Claude + Copilot instructions into single source of truth; added Le Pacte, debug workflow, "done" criteria, journal rule
 - result: any AI reading AGENTS.md gets full setup; wrappers still live but secondary
 - next: optionally reduce CLAUDE.md / copilot-instructions.md to pure pointers
+
+
