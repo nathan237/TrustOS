@@ -55,3 +55,12 @@ Updated: 2026-05-09
 - Reusable command/script record: D:\TrustOS_Admin_Runbook.
 - Compact scripts snapshot: D:\TrustOS_Scripts\OSrust.
 
+
+## WSL / Codex launcher state
+
+- Native WSL Codex is installed and verified: `/usr/local/bin/codex`, `codex-cli 0.130.0`.
+- Windows launcher: `D:\TrustOS_Admin_Runbook\codex-wsl.bat`.
+- PowerShell launcher: `D:\TrustOS_Admin_Runbook\scripts\launch-codex-wsl.ps1`.
+- Linux wrapper: `/home/natedoge/bin/trustos-codex`.
+- Use `D:\TrustOS_Admin_Runbook\scripts\launch-codex-wsl.ps1 -NoPull -Check` to verify without opening an interactive Codex session.
+- Workflow/security/backup plan: `memory/workflow_backup_security_plan.md`.

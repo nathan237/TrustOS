@@ -1092,3 +1092,9 @@
 
 
 
+
+## 2026-05-09 - Native Codex WSL launcher + workflow memory
+- scope: `D:\TrustOS_Admin_Runbook`, `Debian-TrustOS`, `memory/workflow_backup_security_plan.md`.
+- did: installed/verified native Codex in WSL (`/usr/local/bin/codex`, `codex-cli 0.130.0`), installed Linux wrapper `/home/natedoge/bin/trustos-codex`, and created Windows launchers `D:\TrustOS_Admin_Runbook\codex-wsl.bat` + `scripts\launch-codex-wsl.ps1`.
+- result: `launch-codex-wsl.ps1 -NoPull -Check` reaches `/home/natedoge/work/TrustOS` on branch `recovery/post-crash-20260509` and exits 0. WSL is now the preferred Codex work environment; `C:` keeps control scripts, `D:` keeps runbook/scripts/WSL data.
+- next: implement `trustos doctor`, script integrity manifest, scheduled versioned backups, and restore drill before freeing more source data from `C:`.
