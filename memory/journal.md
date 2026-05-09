@@ -7,6 +7,12 @@
 > Each entry: date, scope, what was done, result, follow-up.
 > Keep entries short (3â€“6 lines). No prose. No marketing.
 
+## 2026-05-08 — Porte 1 HAL Phase G : riscv64 build VERT (premier essai)
+- scope: rustup target add riscv64gc-unknown-none-elf ; cargo build --release -p trustos_kernel --target riscv64gc-unknown-none-elf
+- did: zero migration nécessaire — tous les stubs/cfg gates des phases A+B+E couvraient déjà riscv64 via `#[cfg(not(target_arch = "x86_64"))]`
+- result: 0 errs, ELF 12.4 MB, 1m23s. **3 arches verts simultanément** : x86_64 + aarch64 + riscv64. Porte 1 = 100% côté build.
+- next: Phase F-bis (vrai boot E2E QEMU aarch64) requires Limine aarch64 ISO + OVMF.fd firmware. Reportée. Porte 2 (GPU stack stable Polaris) au retour board.
+
 ## 2026-05-08 — Porte 1 HAL Phase E : aarch64 build VERT (54 → 0)
 - scope: stubs/{acpi,cpu}.rs réécrits parité totale, drivers/net/mod.rs (register_drivers gated), bulk migrations memory/{swap,paging,mod,cow}.rs + syscall/linux.rs + interrupts/handlers.rs + drivers/amdgpu/{mod,firmware}.rs + hwscan/timing.rs + exec.rs + shell/{vm,desktop}.rs + jarvis/micro_model.rs
 - did: ACPI structs (FadtInfo+flags+méthodes, IntSourceOverride, LocalApic enabled/online_capable, HpetInfo period_fs/frequency, GenericAddress) ; CpuCapabilities.fma ; bulk asm! → HAL portable : invlpg→arch::flush_tlb, cr3 read/write→arch::{read,write}_page_table_root, mfence→fence(SeqCst), pause→spin_loop, pushfq IF→arch::are_interrupts_enabled
