@@ -10,6 +10,7 @@ Updated: 2026-05-09
   - `D:\TrustOS_Scripts\OSrust` stores the compact scripts/memory snapshot.
   - `D:\WSL\Debian-TrustOS\ext4.vhdx` hosts the Linux development environment.
 - WSL distro `Debian-TrustOS` is the preferred autonomous work environment for Codex.
+- Default rule: always use the configured WSL environment (`Debian-TrustOS`) to communicate with, inspect, edit, build, and recover TrustOS when possible. Windows is only the control plane for launchers, emergency repair, and files that must stay on `C:`/`D:`.
 - Native Codex CLI is installed in WSL at `/usr/local/bin/codex`, version `codex-cli 0.130.0`.
 - Windows launcher: `D:\TrustOS_Admin_Runbook\codex-wsl.bat`.
 - Linux wrapper: `/home/natedoge/bin/trustos-codex`.
@@ -18,7 +19,7 @@ Updated: 2026-05-09
 ## Daily workflow
 
 1. Launch Codex with `D:\TrustOS_Admin_Runbook\codex-wsl.bat`.
-2. Work from WSL path `/home/natedoge/work/TrustOS` when possible.
+2. Work and communicate from WSL path `/home/natedoge/work/TrustOS` by default.
 3. Keep tiny launch/recovery/admin scripts on Windows/ADATA; keep source builds and Linux tooling inside WSL.
 4. Record reusable commands in `D:\TrustOS_Admin_Runbook\commands_20260509_174137.md` or a new dated command log.
 5. After changing scripts/memory, run `D:\TrustOS_Admin_Runbook\scripts\sync-trustos-scripts-to-adata.ps1`.

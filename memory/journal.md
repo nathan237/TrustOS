@@ -7,6 +7,18 @@
 > Each entry: date, scope, what was done, result, follow-up.
 > Keep entries short (3â€“6 lines). No prose. No marketing.
 
+## 2026-05-09 - Post-crash C cleanup after best-effort restore
+- scope: recovery / C: cleanup / quarantine.
+- did: restored all targets with proven non-null sources from VS Code History and `.recovery_workspace`, installed WSL `7z` to test old RAR, then moved corrupt/untrusted artifacts and remaining all-zero active files to `D:\TrustOS_Corrupt_Quarantine_20260509_201657`.
+- result: active Windows worktree scan for `docs`, `kernel/src`, `scripts`, `tools`, `memory`, `.github` reports `ZERO_ACTIVE_COUNT=0`; no active `*.corrupt.20260509` remain outside recovery/quarantine.
+- next: use WSL `Debian-TrustOS` as the clean work channel; copy/commit only non-null recovered files needed for build, using the quarantine manifest as audit trail.
+
+## 2026-05-09 - WSL is the default TrustOS work channel
+- scope: workflow memory / agent handoff.
+- did: recorded explicit rule that configured WSL `Debian-TrustOS` is the default environment to communicate with, inspect, edit, build, and recover TrustOS.
+- result: Windows remains launch/admin/recovery control plane; real source work should happen in `/home/natedoge/work/TrustOS` when possible.
+- next: keep recovery reads from old Windows tree read-only unless copying a proven non-null file into the clean WSL/Git path.
+
 ## 2026-05-09 - Debian-TrustOS WSL moved to ADATA + admin runbook
 - scope: WSL/storage autonomy + reusable command record.
 - did: exported old `Debian`, imported `Debian-TrustOS` on `D:\WSL\Debian-TrustOS`, set as default, installed Linux dev tools + Rust nightly + TrustOS targets, cloned `recovery/post-crash-20260509` to `~/work/TrustOS`.

@@ -62,5 +62,6 @@ Updated: 2026-05-09
 - Windows launcher: `D:\TrustOS_Admin_Runbook\codex-wsl.bat`.
 - PowerShell launcher: `D:\TrustOS_Admin_Runbook\scripts\launch-codex-wsl.ps1`.
 - Linux wrapper: `/home/natedoge/bin/trustos-codex`.
+- Operating rule: use configured WSL `Debian-TrustOS` as the default work/communication environment for TrustOS. Do not return to the old Windows worktree as the main workspace except for recovery reads and Windows-specific launch/admin scripts.
 - Use `D:\TrustOS_Admin_Runbook\scripts\launch-codex-wsl.ps1 -NoPull -Check` to verify without opening an interactive Codex session.
 - Workflow/security/backup plan: `memory/workflow_backup_security_plan.md`.
