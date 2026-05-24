@@ -233,6 +233,146 @@ function _show_status {
     Write-Host ""
 }
 
+# ── Rapport d'utilisation ─────────────────────────────────────────────────────
+
+function _show_report {
+    if (-not (Test-Path $script:DB_PATH)) {
+        Write-Host (_red "`n  DB introuvable: $script:DB_PATH")
+        Write-Host (_dim "  -> Lance d'abord: tw start`n")
+        return
+    }
+
+    $py  = $script:PYTHON
+    $db  = $script:DB_PATH
+    $tmp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.py'
+
+    @'
+import sqlite3, json, time, sys
+db = sqlite3.connect(sys.argv[1])
+db.row_factory = sqlite3.Row
+now = int(time.time())
+h24 = now - 86400; h1 = now - 3600; d7 = now - 604800
+
+def q(sql, *a):
+    try: return db.execute(sql, a).fetchone()[0]
+    except: return 0
+
+def has(t):
+    return bool(db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone())
+
+r = {
+    "accounts_total":   q("SELECT COUNT(*) FROM twookie_accounts"),
+    "accounts_24h":     q("SELECT COUNT(*) FROM twookie_accounts WHERE created_at>=?", h24),
+    "accounts_7d":      q("SELECT COUNT(*) FROM twookie_accounts WHERE created_at>=?", d7),
+    "messages_total":   q("SELECT COUNT(*) FROM twookie_bridge_messages"),
+    "messages_24h":     q("SELECT COUNT(*) FROM twookie_bridge_messages WHERE created_at>=?", h24),
+    "messages_7d":      q("SELECT COUNT(*) FROM twookie_bridge_messages WHERE created_at>=?", d7),
+    "invites_total":    q("SELECT COUNT(*) FROM twookie_invites"),
+    "invites_accepted": q("SELECT COUNT(*) FROM twookie_invites WHERE accepted_by IS NOT NULL"),
+    "invites_pending":  q("SELECT COUNT(*) FROM twookie_invites WHERE accepted_by IS NULL AND revoked=0"),
+    "contacts_total":   q("SELECT COUNT(*) FROM twookie_contacts"),
+    "reqs_total": q("SELECT COUNT(*) FROM request_log") if has("request_log") else -1,
+    "reqs_1h":    q("SELECT COUNT(*) FROM request_log WHERE ts>=?", h1)  if has("request_log") else -1,
+    "reqs_24h":   q("SELECT COUNT(*) FROM request_log WHERE ts>=?", h24) if has("request_log") else -1,
+    "recon_24h":  q("SELECT COUNT(*) FROM request_log WHERE ts>=? AND flag='recon'", h24) if has("request_log") else -1,
+    "bans":       q("SELECT COUNT(*) FROM ip_bans") if has("ip_bans") else -1,
+}
+top = []
+try:
+    rows = db.execute("SELECT display_name, created_at FROM twookie_accounts ORDER BY created_at DESC LIMIT 5").fetchall()
+    top = [{"name": r["display_name"], "ts": r["created_at"]} for r in rows]
+except: pass
+r["top_accounts"] = top
+print(json.dumps(r))
+db.close()
+'@ | Set-Content -Path $tmp -Encoding UTF8
+
+    $data = & $py $tmp $db 2>$null
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+
+    if (-not $data) {
+        Write-Host (_red "`n  Erreur lecture DB`n"); return
+    }
+
+    try { $d = $data | ConvertFrom-Json }
+    catch { Write-Host (_red "`n  Erreur parsing donnees`n"); return }
+
+    $dbSizeKb = [math]::Round((Get-Item $script:DB_PATH).Length / 1KB, 1)
+    $uptime = ""
+    $proc = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq "python.exe" -and $_.CommandLine -like "*tbacon_server.py*" } |
+            Select-Object -First 1
+    if ($proc) {
+        $diff = (Get-Date) - $proc.CreationDate
+        if ($diff.TotalHours -ge 1) { $uptime = "$([math]::Floor($diff.TotalHours))h$($diff.Minutes)m" }
+        else { $uptime = "$($diff.Minutes)m$($diff.Seconds)s" }
+    }
+
+    $sep  = (_dim "  ----------------------------------------")
+    $pad1 = 22
+    $pad2 = 10
+
+    Write-Host ""
+    Write-Host (_bold "  Rapport d'utilisation T-Wookie")
+    Write-Host $sep
+
+    # Serveur
+    Write-Host (_bold "  SERVEUR")
+    $srvStatus = if (_is_server_running) { (_green "actif") + $(if ($uptime) { (_dim "  uptime $uptime") } else { "" }) } else { _red "arrete" }
+    Write-Host ("  " + "Statut".PadRight($pad1) + $srvStatus)
+    Write-Host ("  " + "DB".PadRight($pad1) + (_cyan "$dbSizeKb KB"))
+    Write-Host ""
+
+    # Comptes
+    Write-Host (_bold "  COMPTES")
+    Write-Host ("  " + "Total".PadRight($pad1)        + (_cyan $d.accounts_total))
+    Write-Host ("  " + "Nouveaux 24h".PadRight($pad1) + (_cyan $d.accounts_24h))
+    Write-Host ("  " + "Nouveaux 7j".PadRight($pad1)  + (_cyan $d.accounts_7d))
+    Write-Host ("  " + "Contacts (paires)".PadRight($pad1) + (_cyan $d.contacts_total))
+    if ($d.top_accounts) {
+        Write-Host ("  " + (_dim "Recents:"))
+        foreach ($a in $d.top_accounts) {
+            $ts = [System.DateTimeOffset]::FromUnixTimeSeconds($a.ts).LocalDateTime.ToString("MM-dd HH:mm")
+            Write-Host ("    " + (_dim $ts) + "  " + $a.name)
+        }
+    }
+    Write-Host ""
+
+    # Messages
+    Write-Host (_bold "  MESSAGES (bridge E2E)")
+    Write-Host ("  " + "Total".PadRight($pad1)     + (_cyan $d.messages_total))
+    Write-Host ("  " + "Derniere 24h".PadRight($pad1) + (_cyan $d.messages_24h))
+    Write-Host ("  " + "Derniers 7j".PadRight($pad1)  + (_cyan $d.messages_7d))
+    Write-Host ""
+
+    # Invites
+    Write-Host (_bold "  INVITES")
+    Write-Host ("  " + "Total crees".PadRight($pad1)   + (_cyan $d.invites_total))
+    Write-Host ("  " + "Acceptees".PadRight($pad1)     + (_green $d.invites_accepted))
+    Write-Host ("  " + "En attente".PadRight($pad1)    + (_yellow $d.invites_pending))
+    Write-Host ""
+
+    # Trafic
+    if ($d.reqs_total -ge 0) {
+        Write-Host (_bold "  TRAFIC HTTP")
+        Write-Host ("  " + "Total requetes".PadRight($pad1)  + (_cyan $d.reqs_total))
+        Write-Host ("  " + "Derniere heure".PadRight($pad1)  + (_cyan $d.reqs_1h))
+        Write-Host ("  " + "Derniere 24h".PadRight($pad1)    + (_cyan $d.reqs_24h))
+        $reconColor = if ($d.recon_24h -gt 0) { _red $d.recon_24h } else { _green $d.recon_24h }
+        Write-Host ("  " + "Probes recon 24h".PadRight($pad1) + $reconColor)
+        $banColor = if ($d.bans -gt 0) { _red $d.bans } else { _green "0" }
+        Write-Host ("  " + "IPs bannies".PadRight($pad1)     + $banColor)
+        Write-Host ""
+    }
+
+    Write-Host $sep
+    $secUrl = if (_is_ngrok_running) {
+        $u = _get_ngrok_url; if ($u) { "$u/admin/security" } else { "http://127.0.0.1:$script:PORT/admin/security" }
+    } else { "http://127.0.0.1:$script:PORT/admin/security" }
+    Write-Host ("  " + (_dim "Rapport securite complet: ") + (_cyan $secUrl))
+    Write-Host ""
+}
+
 # ── Raccourci Bureau ───────────────────────────────────────────────────────────
 
 function _create_shortcut {
@@ -272,6 +412,7 @@ function _show_banner {
         @{ c = "tw open";                              d = "Ouvrir l'UI dans le navigateur" }
         @{ c = "tw logs   [server|ngrok]";             d = "Afficher les logs" }
         @{ c = "tw token";                             d = "Afficher / regen TBACON_BRIDGE_TOKEN" }
+        @{ c = "tw report";                            d = "Rapport d utilisation (comptes, messages, trafic)" }
         @{ c = "tw shortcut";                          d = "Creer un raccourci sur le Bureau" }
         @{ c = "tw help";                              d = "Cette aide" }
     ) | ForEach-Object {
@@ -302,7 +443,7 @@ function tw {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0, HelpMessage = "Commande a executer")]
-        [ValidateSet('start','stop','restart','status','url','open','logs','token','shortcut','help')]
+        [ValidateSet('start','stop','restart','status','url','open','logs','token','report','shortcut','help')]
         [string]$Command = 'help',
 
         [Parameter(Position = 1, HelpMessage = "Service cible")]
@@ -353,6 +494,8 @@ function tw {
         }
 
         'status' { _show_status }
+
+        'report' { _show_report }
 
         'url' {
             $url = _get_ngrok_url
@@ -437,6 +580,7 @@ Register-ArgumentCompleter -CommandName tw -ParameterName Command -ScriptBlock {
         [System.Management.Automation.CompletionResult]::new('open',     'open',     'ParameterValue', 'Ouvrir l UI dans le navigateur')
         [System.Management.Automation.CompletionResult]::new('logs',     'logs',     'ParameterValue', 'Afficher les logs server ou ngrok inspector')
         [System.Management.Automation.CompletionResult]::new('token',    'token',    'ParameterValue', 'Afficher ou regenerer TBACON_BRIDGE_TOKEN')
+        [System.Management.Automation.CompletionResult]::new('report',   'report',   'ParameterValue', 'Rapport utilisation: comptes, messages, trafic, securite')
         [System.Management.Automation.CompletionResult]::new('shortcut', 'shortcut', 'ParameterValue', 'Creer un raccourci sur le Bureau')
         [System.Management.Automation.CompletionResult]::new('help',     'help',     'ParameterValue', 'Afficher l aide et l etat des services')
     ) | Where-Object { $_.CompletionText -like "$word*" }
