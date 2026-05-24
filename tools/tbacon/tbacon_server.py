@@ -779,6 +779,20 @@ class Hub:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reqlog_ip_ts ON request_log(ip, ts)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ip_geo_cache (
+              ip          TEXT PRIMARY KEY,
+              country     TEXT,
+              country_code TEXT,
+              region      TEXT,
+              city        TEXT,
+              isp         TEXT,
+              org         TEXT,
+              cached_at   INTEGER NOT NULL
+            )
+            """
+        )
         self.ensure_indexes(conn)
 
     def payloads_dir(self) -> Path:
@@ -935,14 +949,87 @@ class Hub:
             bans = conn.execute(
                 "SELECT ip, reason, banned_at, auto, expires_at FROM ip_bans ORDER BY banned_at DESC"
             ).fetchall()
+        top_ip_list = [dict(r) for r in top_ips]
+        ban_list = [dict(r) for r in bans]
+
+        # Enrich with cached geo (no network calls here — use cache only)
+        all_ips = list({r["ip"] for r in top_ip_list} | {r["ip"] for r in ban_list})
+        geo_map: dict[str, dict] = {}
+        if all_ips:
+            with self.connect() as conn:
+                placeholders = ",".join("?" * len(all_ips))
+                geo_rows = conn.execute(
+                    f"SELECT * FROM ip_geo_cache WHERE ip IN ({placeholders})", all_ips
+                ).fetchall()
+                geo_map = {r["ip"]: dict(r) for r in geo_rows}
+
+        for row in top_ip_list:
+            row["geo"] = geo_map.get(row["ip"])
+        for row in ban_list:
+            row["geo"] = geo_map.get(row["ip"])
+
         return {
             "total_requests": total_reqs,
             "requests_1h": reqs_1h,
             "recon_24h": recon_24h,
-            "top_ips": [dict(r) for r in top_ips],
+            "top_ips": top_ip_list,
             "recent_recon": [dict(r) for r in recent_recon],
-            "bans": [dict(r) for r in bans],
+            "bans": ban_list,
         }
+
+    def geolocate(self, ip: str, ttl: int = 86400) -> dict | None:
+        """Return geo info for an IP. Caches in DB for `ttl` seconds. Returns None for private IPs."""
+        import ipaddress
+        try:
+            addr = ipaddress.ip_address(ip)
+            if addr.is_private or addr.is_loopback or addr.is_unspecified:
+                return {"country": "Local", "country_code": "LO", "city": "", "isp": "private", "org": ""}
+        except ValueError:
+            return None
+
+        now = int(time.time())
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM ip_geo_cache WHERE ip=?", (ip,)).fetchone()
+        if row and (now - row["cached_at"]) < ttl:
+            return dict(row)
+
+        try:
+            import urllib.request as _ur
+            url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,isp,org"
+            with _ur.urlopen(url, timeout=4) as resp:
+                data = json.loads(resp.read())
+            if data.get("status") != "success":
+                return None
+            geo = {
+                "ip": ip,
+                "country": data.get("country", ""),
+                "country_code": data.get("countryCode", ""),
+                "region": data.get("regionName", ""),
+                "city": data.get("city", ""),
+                "isp": data.get("isp", ""),
+                "org": data.get("org", ""),
+                "cached_at": now,
+            }
+            with self.connect() as conn:
+                conn.execute(
+                    """INSERT OR REPLACE INTO ip_geo_cache
+                       (ip,country,country_code,region,city,isp,org,cached_at)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (geo["ip"], geo["country"], geo["country_code"], geo["region"],
+                     geo["city"], geo["isp"], geo["org"], geo["cached_at"]),
+                )
+            return geo
+        except Exception:
+            return None
+
+    def geolocate_many(self, ips: list[str]) -> dict[str, dict]:
+        """Batch geolocate a list of IPs. Returns {ip: geo_dict}."""
+        result = {}
+        for ip in ips:
+            geo = self.geolocate(ip)
+            if geo:
+                result[ip] = geo
+        return result
 
     def server_health(self) -> dict:
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
@@ -4926,6 +5013,22 @@ boot().catch(e => document.querySelector("#status").textContent = e.message);
 """
 
 
+def _country_flag(code: str) -> str:
+    if not code or len(code) != 2 or code == "LO":
+        return ""
+    return "".join(chr(0x1F1E6 + ord(c) - ord('A')) for c in code.upper())
+
+def _geo_cell(geo: dict | None) -> str:
+    if not geo:
+        return "<td style='color:#8b949e'>—</td>"
+    flag = _country_flag(geo.get("country_code", ""))
+    country = geo.get("country", "")
+    city = geo.get("city", "")
+    isp = geo.get("isp", "") or geo.get("org", "")
+    loc = f"{city}, {country}" if city else country
+    tip = isp[:50] if isp else ""
+    return f"<td title='{tip}'>{flag} {loc}</td>"
+
 def _render_security_report(r: dict) -> str:
     import datetime
     def fmt_ts(ts):
@@ -4934,17 +5037,22 @@ def _render_security_report(r: dict) -> str:
         return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
     ban_rows = "".join(
-        f"<tr><td>{b['ip']}</td><td>{'AUTO' if b['auto'] else 'MANUAL'}</td>"
+        f"<tr><td>{b['ip']}</td>"
+        + _geo_cell(b.get("geo"))
+        + f"<td>{'AUTO' if b['auto'] else 'MANUAL'}</td>"
         f"<td>{b['reason']}</td><td>{fmt_ts(b['banned_at'])}</td>"
         f"<td>{'permanent' if not b['expires_at'] else fmt_ts(b['expires_at'])}</td>"
         f"<td><button onclick=\"unban('{b['ip']}')\">Unban</button></td></tr>"
         for b in r["bans"]
     )
     ip_rows = "".join(
-        f"<tr class=\"{'danger' if row['recon_hits'] else ''}\"><td>{row['ip']}</td>"
-        f"<td>{row['hits']}</td><td>{row['recon_hits']}</td>"
+        f"<tr class=\"{'danger' if row['recon_hits'] else ''}\">"
+        f"<td>{row['ip']}</td>"
+        + _geo_cell(row.get("geo"))
+        + f"<td>{row['hits']}</td><td>{row['recon_hits']}</td>"
         f"<td>{row['not_found']}</td><td>{fmt_ts(row['last_seen'])}</td>"
-        f"<td><button onclick=\"ban('{row['ip']}')\">Ban</button></td></tr>"
+        f"<td><button onclick=\"geoAndBan('{row['ip']}')\">Ban</button>"
+        f"<button style='margin-left:.3rem' onclick=\"lookupGeo('{row['ip']}')\">Geo</button></td></tr>"
         for row in r["top_ips"]
     )
     recon_rows = "".join(
@@ -4983,7 +5091,7 @@ button:hover{{background:#f85149;color:#fff;border-color:#f85149;}}
 </div>
 
 <h2>Ban list</h2>
-<table><tr><th>IP</th><th>Type</th><th>Reason</th><th>Banned at</th><th>Expires</th><th>Action</th></tr>
+<table><tr><th>IP</th><th>Localisation</th><th>Type</th><th>Reason</th><th>Banned at</th><th>Expires</th><th>Action</th></tr>
 {ban_rows or '<tr><td colspan=6 style="color:#8b949e">No bans</td></tr>'}
 </table>
 <div class=ban-form>
@@ -4994,7 +5102,7 @@ button:hover{{background:#f85149;color:#fff;border-color:#f85149;}}
 <div id=msg></div>
 
 <h2>Top IPs — last 24h <span style="font-size:.8rem;color:#8b949e">(red = recon detected)</span></h2>
-<table><tr><th>IP</th><th>Hits</th><th>Recon</th><th>404s</th><th>Last seen</th><th>Action</th></tr>
+<table><tr><th>IP</th><th>Localisation</th><th>Hits</th><th>Recon</th><th>404s</th><th>Last seen</th><th>Action</th></tr>
 {ip_rows or '<tr><td colspan=6 style="color:#8b949e">No data</td></tr>'}
 </table>
 
@@ -5004,22 +5112,49 @@ button:hover{{background:#f85149;color:#fff;border-color:#f85149;}}
 </table>
 
 <script>
-async function ban(ip) {{
-  const r = await fetch('/admin/ban', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{ip,reason:'manual ban from report'}})}});
+const msg = () => document.getElementById('msg');
+async function ban(ip, reason) {{
+  reason = reason || 'manual ban from report';
+  const r = await fetch('/admin/ban', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{ip,reason}})}});
   const d = await r.json();
-  document.getElementById('msg').textContent = d.ok ? 'Banned: '+ip : 'Error: '+d.error;
+  msg().textContent = d.ok ? 'Banned: '+ip : 'Error: '+d.error;
   setTimeout(()=>location.reload(), 1200);
 }}
 async function unban(ip) {{
   const r = await fetch('/admin/unban', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{ip}})}});
   const d = await r.json();
-  document.getElementById('msg').textContent = d.ok ? 'Unbanned: '+ip : 'Error: '+d.error;
+  msg().textContent = d.ok ? 'Unbanned: '+ip : 'Error: '+d.error;
   setTimeout(()=>location.reload(), 1200);
+}}
+async function lookupGeo(ip) {{
+  msg().textContent = 'Lookup geo: '+ip+'...';
+  const r = await fetch('/admin/geoip?ip='+encodeURIComponent(ip));
+  const d = await r.json();
+  if (d.ok && d.geo) {{
+    const g = d.geo;
+    msg().textContent = ip+' → '+g.city+', '+g.country+' | ISP: '+(g.isp||g.org||'?');
+    setTimeout(()=>location.reload(), 2500);
+  }} else {{
+    msg().textContent = 'Geo non disponible pour '+ip;
+  }}
+}}
+async function geoAndBan(ip) {{
+  msg().textContent = 'Lookup + ban: '+ip+'...';
+  let reason = 'manual ban';
+  try {{
+    const r = await fetch('/admin/geoip?ip='+encodeURIComponent(ip));
+    const d = await r.json();
+    if (d.ok && d.geo) {{
+      const g = d.geo;
+      reason = 'manual ban — '+g.city+', '+g.country+' ('+g.isp+')';
+    }}
+  }} catch(e) {{}}
+  await ban(ip, reason);
 }}
 function banManual() {{
   const ip = document.getElementById('banip').value.trim();
   const reason = document.getElementById('banreason').value.trim() || 'manual';
-  if (ip) ban(ip);
+  if (ip) geoAndBan(ip);
 }}
 </script>
 </body></html>"""
@@ -5483,6 +5618,15 @@ img{{margin-top:1.5rem;border-radius:8px;border:2px solid #30363d;}}
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+                return
+            if parsed.path == "/admin/geoip":
+                qs = parse_qs(parsed.query)
+                ip = qs.get("ip", [""])[0].strip()
+                if not ip:
+                    self.send_json(400, {"ok": False, "error": "ip param required"})
+                    return
+                geo = hub.geolocate(ip)
+                self.send_json(200, {"ok": True, "ip": ip, "geo": geo})
                 return
             self.send_json(404, {"ok": False, "error": "not found"})
 

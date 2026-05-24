@@ -373,6 +373,132 @@ db.close()
     Write-Host ""
 }
 
+# ── GeoIP ─────────────────────────────────────────────────────────────────────
+
+function _show_geoip {
+    param([string]$TargetIp = "")
+
+    $py  = $script:PYTHON
+    $db  = $script:DB_PATH
+    $tmp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.py'
+
+    @'
+import sqlite3, json, sys, urllib.request, time
+
+db_path  = sys.argv[1]
+target   = sys.argv[2] if len(sys.argv) > 2 else ""
+
+db = sqlite3.connect(db_path)
+db.row_factory = sqlite3.Row
+
+def geolocate(ip):
+    import ipaddress
+    try:
+        a = ipaddress.ip_address(ip)
+        if a.is_private or a.is_loopback:
+            return {"ip": ip, "country": "Local", "country_code": "LO", "city": "", "isp": "private", "org": ""}
+    except: return None
+    # Check cache first
+    row = db.execute("SELECT * FROM ip_geo_cache WHERE ip=?", (ip,)).fetchone() if "ip_geo_cache" in [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()] else None
+    if row and (time.time() - row["cached_at"]) < 86400:
+        return dict(row)
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,isp,org"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            d = json.loads(r.read())
+        if d.get("status") != "success": return None
+        geo = {"ip": ip, "country": d.get("country",""), "country_code": d.get("countryCode",""),
+               "region": d.get("regionName",""), "city": d.get("city",""),
+               "isp": d.get("isp",""), "org": d.get("org",""), "cached_at": int(time.time())}
+        try:
+            db.execute("INSERT OR REPLACE INTO ip_geo_cache(ip,country,country_code,region,city,isp,org,cached_at) VALUES(?,?,?,?,?,?,?,?)",
+                (geo["ip"],geo["country"],geo["country_code"],geo["region"],geo["city"],geo["isp"],geo["org"],geo["cached_at"]))
+            db.commit()
+        except: pass
+        return geo
+    except: return None
+
+if target:
+    ips = [target]
+else:
+    # Prend les IPs uniques des 48 dernieres heures
+    try:
+        rows = db.execute("SELECT DISTINCT ip FROM request_log WHERE ts>=? ORDER BY ip", (int(time.time())-172800,)).fetchall()
+        ips = [r["ip"] for r in rows]
+    except: ips = []
+    # Aussi les bans
+    try:
+        bans = db.execute("SELECT DISTINCT ip FROM ip_bans").fetchall()
+        for b in bans:
+            if b["ip"] not in ips: ips.append(b["ip"])
+    except: pass
+
+results = []
+for ip in ips:
+    geo = geolocate(ip)
+    results.append({"ip": ip, "geo": geo})
+
+print(json.dumps(results))
+db.close()
+'@ | Set-Content -Path $tmp -Encoding UTF8
+
+    $args2 = @($tmp, $db)
+    if ($TargetIp -and $TargetIp -ne 'all') { $args2 += $TargetIp }
+
+    Write-Host ""
+    Write-Host (_bold "  Geolocalisation des IPs")
+    Write-Host (_dim  "  ----------------------------------------")
+
+    $raw = & $py @args2 2>$null
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+
+    if (-not $raw) {
+        Write-Host (_red "  Erreur ou aucune IP trouvee`n"); return
+    }
+
+    try { $results = $raw | ConvertFrom-Json }
+    catch { Write-Host (_red "  Erreur parsing`n"); return }
+
+    if ($results.Count -eq 0) {
+        Write-Host (_dim "  Aucune IP dans les logs (serveur jamais lance?)`n"); return
+    }
+
+    $colIp      = 18
+    $colLoc     = 28
+    $colIsp     = 32
+
+    Write-Host ("  " + "IP".PadRight($colIp) + "Localisation".PadRight($colLoc) + "ISP / Org")
+    Write-Host (_dim ("  " + ("-" * ($colIp + $colLoc + $colIsp))))
+
+    foreach ($item in $results) {
+        $ip  = $item.ip
+        $geo = $item.geo
+
+        if (-not $geo) {
+            Write-Host ("  " + (_yellow $ip.PadRight($colIp)) + (_dim "lookup echoue".PadRight($colLoc)))
+            continue
+        }
+
+        if ($geo.country_code -eq "LO") {
+            Write-Host ("  " + (_dim $ip.PadRight($colIp)) + (_dim "Local / Private".PadRight($colLoc)))
+            continue
+        }
+
+        $loc = if ($geo.city) { "$($geo.city), $($geo.country)" } else { $geo.country }
+        $isp = if ($geo.isp)  { $geo.isp } elseif ($geo.org) { $geo.org } else { "-" }
+
+        $color = if ($isp -match "DigitalOcean|Linode|Vultr|OVH|Hetzner|Amazon|Google|Microsoft|Cloudflare|Tor|vpn|proxy|datacenter" ) {
+            { param($t) _red $t }
+        } else { { param($t) _cyan $t } }
+
+        Write-Host ("  " + (& $color $ip.PadRight($colIp)) + $loc.PadRight($colLoc) + (_dim $isp))
+    }
+
+    Write-Host ""
+    Write-Host (_dim "  Rouge = datacenter/VPN/proxy suspect   |   tw geoip <ip> pour une IP specifique")
+    Write-Host ""
+}
+
 # ── Raccourci Bureau ───────────────────────────────────────────────────────────
 
 function _create_shortcut {
@@ -413,6 +539,7 @@ function _show_banner {
         @{ c = "tw logs   [server|ngrok]";             d = "Afficher les logs" }
         @{ c = "tw token";                             d = "Afficher / regen TBACON_BRIDGE_TOKEN" }
         @{ c = "tw report";                            d = "Rapport d utilisation (comptes, messages, trafic)" }
+        @{ c = "tw geoip  [ip]";                       d = "Localiser les IPs suspectes (pays, ville, ISP)" }
         @{ c = "tw shortcut";                          d = "Creer un raccourci sur le Bureau" }
         @{ c = "tw help";                              d = "Cette aide" }
     ) | ForEach-Object {
@@ -443,7 +570,7 @@ function tw {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0, HelpMessage = "Commande a executer")]
-        [ValidateSet('start','stop','restart','status','url','open','logs','token','report','shortcut','help')]
+        [ValidateSet('start','stop','restart','status','url','open','logs','token','report','geoip','shortcut','help')]
         [string]$Command = 'help',
 
         [Parameter(Position = 1, HelpMessage = "Service cible")]
@@ -496,6 +623,8 @@ function tw {
         'status' { _show_status }
 
         'report' { _show_report }
+
+        'geoip'  { _show_geoip $Service }
 
         'url' {
             $url = _get_ngrok_url
@@ -581,6 +710,7 @@ Register-ArgumentCompleter -CommandName tw -ParameterName Command -ScriptBlock {
         [System.Management.Automation.CompletionResult]::new('logs',     'logs',     'ParameterValue', 'Afficher les logs server ou ngrok inspector')
         [System.Management.Automation.CompletionResult]::new('token',    'token',    'ParameterValue', 'Afficher ou regenerer TBACON_BRIDGE_TOKEN')
         [System.Management.Automation.CompletionResult]::new('report',   'report',   'ParameterValue', 'Rapport utilisation: comptes, messages, trafic, securite')
+        [System.Management.Automation.CompletionResult]::new('geoip',    'geoip',    'ParameterValue', 'Localiser les IPs suspectes (pays, ville, ISP)')
         [System.Management.Automation.CompletionResult]::new('shortcut', 'shortcut', 'ParameterValue', 'Creer un raccourci sur le Bureau')
         [System.Management.Automation.CompletionResult]::new('help',     'help',     'ParameterValue', 'Afficher l aide et l etat des services')
     ) | Where-Object { $_.CompletionText -like "$word*" }
