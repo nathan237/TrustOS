@@ -75,7 +75,7 @@ $ngrokRunning = Get-CimInstance Win32_Process |
   Where-Object { $_.Name -eq "ngrok.exe" -and $_.CommandLine -like "* http *$Port*" }
 foreach ($p in $ngrokRunning) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
 
-$ngrokArgs = @("http", "http://127.0.0.1:$Port", "--inspect=false", "--url", $PublicUrl)
+$ngrokArgs = @("http", "--domain=$PublicUrl", "http://127.0.0.1:$Port", "--inspect=false")
 Start-Process -FilePath $Ngrok -WindowStyle Hidden -ArgumentList $ngrokArgs
 
 $publicUrl = ""
