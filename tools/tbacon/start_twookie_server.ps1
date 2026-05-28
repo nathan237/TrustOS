@@ -19,15 +19,8 @@ New-Item -ItemType Directory -Force -Path $LogDir    | Out-Null
 New-Item -ItemType Directory -Force -Path $DataDir   | Out-Null
 New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
 
-function Find-Ngrok {
-  $cmd = Get-Command ngrok -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
-  $wingetPath = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe"
-  if (Test-Path $wingetPath) { return $wingetPath }
-  throw "ngrok.exe introuvable."
-}
-
-$Ngrok  = Find-Ngrok
+$Ngrok = "C:\ProgramData\ngrok\ngrok.exe"
+if (-not (Test-Path $Ngrok)) { throw "ngrok.exe introuvable : $Ngrok" }
 $Python = Join-Path $NativeRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) { throw "Venv absent : $Python" }
 
@@ -75,7 +68,7 @@ $ngrokRunning = Get-CimInstance Win32_Process |
   Where-Object { $_.Name -eq "ngrok.exe" -and $_.CommandLine -like "* http *$Port*" }
 foreach ($p in $ngrokRunning) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
 
-$ngrokArgs = @("http", "--domain=$PublicUrl", "http://127.0.0.1:$Port", "--inspect=false")
+$ngrokArgs = @("http", "--url=$PublicUrl", "http://127.0.0.1:$Port", "--inspect=false", "--config=C:\ProgramData\ngrok\ngrok.yml")
 Start-Process -FilePath $Ngrok -WindowStyle Hidden -ArgumentList $ngrokArgs
 
 $publicUrl = ""
