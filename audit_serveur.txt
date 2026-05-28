@@ -1,0 +1,383 @@
+﻿===== AUDIT serveurlapointetech 05/27/2026 20:00:29 =====
+n--- CPU/RAM ---
+@{TotalPhysicalMemory=17087774720; NumberOfLogicalProcessors=12}
+n--- Logiciels ---
+@{DisplayName=AMD DVR64; DisplayVersion=1.0.2}
+@{DisplayName=AMD Settings; DisplayVersion=2021.0430.0946.17581}
+@{DisplayName=AMD Software; DisplayVersion=21.5.1}
+@{DisplayName=AMD User Experience Program Installer; DisplayVersion=2110.03.01.430}
+@{DisplayName=Apple Application Support (64 bits); DisplayVersion=8.6}
+@{DisplayName=Apple Mobile Device Support; DisplayVersion=18.0.0.33}
+@{DisplayName=Bonjour; DisplayVersion=3.1.0.1}
+@{DisplayName=Branding64; DisplayVersion=1.00.0004}
+@{DisplayName=Canon MF210 Series; DisplayVersion=4.5.0.0}
+@{DisplayName=Contrôle d’intégrité du PC Windows; DisplayVersion=3.6.2204.08001}
+@{DisplayName=Git; DisplayVersion=2.54.0}
+@{DisplayName=GPX Common OSS (POCO, OpenSSL) and libprotobuf binaries; DisplayVersion=7.1}
+@{DisplayName=iTunes; DisplayVersion=12.13.4.4}
+@{DisplayName=Java 8 Update 271 (64-bit); DisplayVersion=8.0.2710.9}
+@{DisplayName=Microsoft Update Health Tools; DisplayVersion=3.74.0.0}
+@{DisplayName=Microsoft Visual C++ 2008 Redistributable - x64 9.0.30729.6161; DisplayVersion=9.0.30729.6161}
+@{DisplayName=Microsoft Visual C++ 2019 X64 Additional Runtime - 14.29.30153; DisplayVersion=14.29.30153}
+@{DisplayName=Microsoft Visual C++ 2019 X64 Minimum Runtime - 14.29.30153; DisplayVersion=14.29.30153}
+@{DisplayName=Mises à jour NVIDIA 38.0.8.0; DisplayVersion=38.0.8.0}
+@{DisplayName=MyMonero 1.3.3; DisplayVersion=1.3.3}
+@{DisplayName=Node.js; DisplayVersion=26.2.0}
+@{DisplayName=NVAPI Monitor plugin for NvContainer; DisplayVersion=1.33}
+@{DisplayName=NVIDIA ABHub; DisplayVersion=14.3.61.0}
+@{DisplayName=NVIDIA Backend; DisplayVersion=38.0.8.0}
+@{DisplayName=NVIDIA Container; DisplayVersion=1.33}
+@{DisplayName=NVIDIA FrameView SDK 1.1.4923.29968894; DisplayVersion=1.1.4923.29968894}
+@{DisplayName=NVIDIA GeForce Experience 3.23.0.74; DisplayVersion=3.23.0.74}
+@{DisplayName=NVIDIA Install Application; DisplayVersion=2.1002.357.0}
+@{DisplayName=NVIDIA LocalSystem Container; DisplayVersion=1.33}
+@{DisplayName=NVIDIA Logiciel système PhysX 9.19.0218; DisplayVersion=9.19.0218}
+@{DisplayName=NVIDIA Message Bus for NvContainer; DisplayVersion=1.33}
+@{DisplayName=NVIDIA NetworkService Container; DisplayVersion=1.33}
+@{DisplayName=NVIDIA NodeJS; DisplayVersion=3.23.0.74}
+@{DisplayName=NVIDIA Optimus Update 38.0.8.0; DisplayVersion=38.0.8.0}
+@{DisplayName=NVIDIA Pilote graphique 471.11; DisplayVersion=471.11}
+@{DisplayName=NVIDIA Session Container; DisplayVersion=1.33}
+@{DisplayName=NVIDIA ShadowPlay 3.23.0.74; DisplayVersion=3.23.0.74}
+@{DisplayName=Nvidia Share; DisplayVersion=3.23.0.74}
+@{DisplayName=NVIDIA SHIELD Streaming; DisplayVersion=7.1.29979887}
+@{DisplayName=NVIDIA SHIELD Wireless Controller Driver; DisplayVersion=3.23.0.74}
+@{DisplayName=NVIDIA Telemetry Client; DisplayVersion=14.3.61.0}
+@{DisplayName=NVIDIA TelemetryApi helper for NvContainer; DisplayVersion=1.33}
+@{DisplayName=NVIDIA Update Core; DisplayVersion=38.0.8.0}
+@{DisplayName=NVIDIA USBC Driver 1.46.831.832; DisplayVersion=1.46.831.832}
+@{DisplayName=NVIDIA User Container; DisplayVersion=1.33}
+@{DisplayName=NVIDIA Virtual Audio 4.13.0.0; DisplayVersion=4.13.0.0}
+@{DisplayName=NVIDIA Virtual Host Controller; DisplayVersion=3.04.0.1}
+@{DisplayName=NVIDIA Watchdog Plugin for NvContainer; DisplayVersion=1.33}
+@{DisplayName=NvModuleTracker; DisplayVersion=6.14.24370.22713}
+@{DisplayName=Oracle VM VirtualBox 6.1.16; DisplayVersion=6.1.16}
+@{DisplayName=Plex Media Server 1.43.2.10687 (x64); DisplayVersion=1.43.2.10687}
+@{DisplayName=RyzenMasterSDK; DisplayVersion=1.2.3.5}
+@{DisplayName=Tailscale; DisplayVersion=1.98.2}
+@{DisplayName=Update for x64-based Windows Systems (KB5001716); DisplayVersion=8.94.0.0}
+@{DisplayName=Windows Subsystem for Linux; DisplayVersion=2.7.3.0}
+@{DisplayName=WinRAR 6.00 (64-bit); DisplayVersion=6.00.0}
+@{DisplayName=Wondershare UniConverter(Build 12.5.5.12); DisplayVersion=12.5.5.12}
+n--- Services actifs ---
+@{Name=AMD Crash Defender Service; DisplayName=AMD Crash Defender Service}
+@{Name=AMD External Events Utility; DisplayName=AMD External Events Utility}
+@{Name=Appinfo; DisplayName=Informations d’application}
+@{Name=Apple Mobile Device Service; DisplayName=Apple Mobile Device Service}
+@{Name=AppXSvc; DisplayName=AppX Deployment Service (AppXSVC)}
+@{Name=AudioEndpointBuilder; DisplayName=Générateur de points de terminaison du service Audio Windows}
+@{Name=Audiosrv; DisplayName=Audio Windows}
+@{Name=AUEPLauncher; DisplayName=AMD User Experience Program Launcher}
+@{Name=BFE; DisplayName=Moteur de filtrage de base}
+@{Name=BITS; DisplayName=Service de transfert intelligent en arrière-plan}
+@{Name=Bonjour Service; DisplayName=Service Bonjour}
+@{Name=BrokerInfrastructure; DisplayName=Service d’infrastructure des tâches en arrière-plan}
+@{Name=cbdhsvc_1cfb91; DisplayName=Service utilisateur du Presse-papiers_1cfb91}
+@{Name=CDPSvc; DisplayName=Service de plateforme des appareils connectés}
+@{Name=CDPUserSvc_1cfb91; DisplayName=Service pour utilisateur de plateforme d’appareils connectés_1cfb91}
+@{Name=CertPropSvc; DisplayName=Propagation du certificat}
+@{Name=CoreMessagingRegistrar; DisplayName=CoreMessaging}
+@{Name=CryptSvc; DisplayName=Services de chiffrement}
+@{Name=DcomLaunch; DisplayName=Lanceur de processus serveur DCOM}
+@{Name=DeviceAssociationService; DisplayName=Service d’association de périphérique}
+@{Name=Dhcp; DisplayName=Client DHCP}
+@{Name=DiagTrack; DisplayName=Expériences des utilisateurs connectés et télémétrie}
+@{Name=DispBrokerDesktopSvc; DisplayName=Service de stratégie d'affichage}
+@{Name=Dnscache; DisplayName=Client DNS}
+@{Name=DoSvc; DisplayName=Optimisation de livraison}
+@{Name=DPS; DisplayName=Service de stratégie de diagnostic}
+@{Name=DusmSvc; DisplayName=Utilisation des données}
+@{Name=EventLog; DisplayName=Journal d’événements Windows}
+@{Name=EventSystem; DisplayName=Système d’événement COM+}
+@{Name=fdPHost; DisplayName=Hôte du fournisseur de découverte de fonctions}
+@{Name=FDResPub; DisplayName=Publication des ressources de découverte de fonctions}
+@{Name=FontCache; DisplayName=Service de cache de police Windows}
+@{Name=gpsvc; DisplayName=Client de stratégie de groupe}
+@{Name=hns; DisplayName=Service de réseau hôte}
+@{Name=IKEEXT; DisplayName=Modules de génération de clés IKE et AuthIP}
+@{Name=InstallService; DisplayName=Installation du service Microsoft Store}
+@{Name=iphlpsvc; DisplayName=Assistance IP}
+@{Name=KeyIso; DisplayName=Isolation de clé CNG}
+@{Name=LanmanServer; DisplayName=Serveur}
+@{Name=LanmanWorkstation; DisplayName=Station de travail}
+@{Name=lfsvc; DisplayName=Service de géolocalisation}
+@{Name=LicenseManager; DisplayName=Serveur Gestionnaire de licences Windows}
+@{Name=lmhosts; DisplayName=Assistance NetBIOS sur TCP/IP}
+@{Name=LSM; DisplayName=Gestionnaire de session locale}
+@{Name=MDCoreSvc; DisplayName=Microsoft Defender Service de base}
+@{Name=mpssvc; DisplayName=Pare-feu Windows Defender}
+@{Name=NcbService; DisplayName=Service Broker pour les connexions réseau}
+@{Name=NcdAutoSetup; DisplayName=Configuration automatique des périphériques connectés au réseau}
+@{Name=netprofm; DisplayName=Service de Liste des réseaux}
+@{Name=NlaSvc; DisplayName=Connaissance des emplacements réseau}
+@{Name=nsi; DisplayName=Service Interface du magasin réseau}
+@{Name=nvagent; DisplayName=Service de virtualisation de réseau}
+@{Name=NvContainerLocalSystem; DisplayName=NVIDIA LocalSystem Container}
+@{Name=NVDisplay.ContainerLocalSystem; DisplayName=NVIDIA Display Container LS}
+@{Name=OneSyncSvc_1cfb91; DisplayName=Hôte de synchronisation_1cfb91}
+@{Name=PcaSvc; DisplayName=Service de l’Assistant Compatibilité des programmes}
+@{Name=PimIndexMaintenanceSvc_1cfb91; DisplayName=Coordonnées_1cfb91}
+@{Name=PlexUpdateService; DisplayName=Plex Update Service}
+@{Name=PlugPlay; DisplayName=Plug-and-Play}
+@{Name=PolicyAgent; DisplayName=Agent de stratégie IPsec}
+@{Name=Power; DisplayName=Alimentation}
+@{Name=ProfSvc; DisplayName=Service de profil utilisateur}
+@{Name=RmSvc; DisplayName=Service de gestion radio}
+@{Name=RpcEptMapper; DisplayName=Mappeur de point de terminaison RPC}
+@{Name=RpcSs; DisplayName=Appel de procédure distante (RPC)}
+@{Name=SamSs; DisplayName=Gestionnaire de comptes de sécurité}
+@{Name=ScDeviceEnum; DisplayName=Smart Card Device Enumeration Service}
+@{Name=Schedule; DisplayName=Planificateur de tâches}
+@{Name=SecurityHealthService; DisplayName=Service Sécurité Windows}
+@{Name=SENS; DisplayName=Service de notification d’événements système}
+@{Name=SessionEnv; DisplayName=Configuration des services Bureau à distance}
+@{Name=SharedAccess; DisplayName=Partage de connexion Internet (ICS)}
+@{Name=ShellHWDetection; DisplayName=Détection matérielle du shell}
+@{Name=SplashtopRemoteService; DisplayName=Splashtop® Remote Service}
+@{Name=Spooler; DisplayName=Spouleur d’impression}
+@{Name=SSDPSRV; DisplayName=Découverte SSDP}
+@{Name=SSUService; DisplayName=Splashtop Software Updater Service}
+@{Name=StateRepository; DisplayName=Service State Repository (StateRepository)}
+@{Name=stisvc; DisplayName=Acquisition d’images Windows (WIA)}
+@{Name=StorSvc; DisplayName=Service de stockage}
+@{Name=SysMain; DisplayName=SysMain}
+@{Name=SystemEventsBroker; DisplayName=Service Broker des événements système}
+@{Name=TabletInputService; DisplayName=Service du clavier tactile et du volet d’écriture manuscrite}
+@{Name=Tailscale; DisplayName=Tailscale}
+@{Name=TermService; DisplayName=Services Bureau à distance}
+@{Name=Themes; DisplayName=Thèmes}
+@{Name=TimeBrokerSvc; DisplayName=Service Broker pour les événements horaires}
+@{Name=TokenBroker; DisplayName=Gestionnaire de comptes web}
+@{Name=TrkWks; DisplayName=Client de suivi de lien distribué}
+@{Name=UmRdpService; DisplayName=Redirecteur de port du mode utilisateur des services Bureau à distance}
+@{Name=UnistoreSvc_1cfb91; DisplayName=Stockage des données de l’utilisateur_1cfb91}
+@{Name=UserDataSvc_1cfb91; DisplayName=Accès aux données de l’utilisateur_1cfb91}
+@{Name=UserManager; DisplayName=Gestionnaire des utilisateurs}
+@{Name=UsoSvc; DisplayName=Service Orchestrator pour les mises à jour}
+@{Name=VaultSvc; DisplayName=Gestionnaire d’informations d’identification}
+@{Name=vmcompute; DisplayName=Service de calcul hôte Hyper-V}
+@{Name=Wcmsvc; DisplayName=Gestionnaire des connexions Windows}
+@{Name=WdiServiceHost; DisplayName=Service hôte WDIServiceHost}
+@{Name=WdNisSvc; DisplayName=Service Inspection du réseau de l’antivirus Microsoft Defender}
+@{Name=WinDefend; DisplayName=Service antivirus Microsoft Defender}
+@{Name=WinHttpAutoProxySvc; DisplayName=Service de découverte automatique de Proxy Web pour les services HTTP Windows}
+@{Name=Winmgmt; DisplayName=Infrastructure de gestion Windows}
+@{Name=wmiApSrv; DisplayName=Carte de performance WMI}
+@{Name=WpnService; DisplayName=Service du système de notifications Push Windows}
+@{Name=WpnUserService_1cfb91; DisplayName=Service utilisateur de notifications Push Windows_1cfb91}
+@{Name=wscsvc; DisplayName=Security Center}
+@{Name=WSearch; DisplayName=Windows Search}
+@{Name=WSLService; DisplayName=WSL Service}
+n--- Users ---
+@{Name=Administrateur; Enabled=False}
+@{Name=DefaultAccount; Enabled=False}
+@{Name=Invité; Enabled=True}
+@{Name=Serveur; Enabled=True}
+@{Name=sshd; Enabled=False}
+@{Name=WDAGUtilityAccount; Enabled=False}
+n--- Outils dev ---
+node: v26.2.0
+python: Python est introuvable; exÚcutez sans arguments Ó installer Ó partir du Microsoft Store ou dÚsactivez ce raccourci dans ParamÞtres > Applications > ParamÞtres d
+git: git version 2.54.0.windows.1
+n--- Taches planifiees ---
+@{TaskName=AMDInstallLauncher; State=Ready}
+@{TaskName=AMDLinkUpdate; State=Ready}
+@{TaskName=AMDRyzenMasterSDKTask; State=Running}
+@{TaskName=MicrosoftEdgeUpdateTaskMachineCore; State=Ready}
+@{TaskName=MicrosoftEdgeUpdateTaskMachineUA; State=Ready}
+@{TaskName=NvBatteryBoostCheckOnLogon_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvDriverUpdateCheckDaily_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NVIDIA GeForce Experience SelfUpdate_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvNodeLauncher_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvProfileUpdaterDaily_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvProfileUpdaterOnLogon_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvTmRep_CrashReport1_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvTmRep_CrashReport2_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvTmRep_CrashReport3_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=NvTmRep_CrashReport4_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}; State=Ready}
+@{TaskName=OneDrive Reporting Task-S-1-5-21-550761434-196691413-3283372846-1001; State=Ready}
+@{TaskName=OneDrive Standalone Update Task-S-1-5-21-550761434-196691413-3283372846-1001; State=Ready}
+@{TaskName=OneDrive Startup Task-S-1-5-21-550761434-196691413-3283372846-1001; State=Ready}
+@{TaskName=PostponeDeviceSetupToast_S-1-5-21-550761434-196691413-3283372846-1001_14; State=Ready}
+@{TaskName=StartCN; State=Ready}
+@{TaskName=StartCNBM; State=Ready}
+@{TaskName=StartDVR; State=Ready}
+@{TaskName=AppleSoftwareUpdate; State=Ready}
+@{TaskName=GoogleUpdaterTaskSystem149.0.7814.0{CECD0F55-E9DD-4FFA-99E9-B645F4A40434}; State=Ready}
+@{TaskName=RunPlatformExperienceHelperOnUnlock; State=Ready}
+@{TaskName=RunPlatformExperienceHelper_Daily; State=Ready}
+@{TaskName=RunPlatformExperienceHelper_Metrics; State=Ready}
+@{TaskName=.NET Framework NGEN v4.0.30319; State=Ready}
+@{TaskName=.NET Framework NGEN v4.0.30319 64; State=Ready}
+@{TaskName=AD RMS Rights Policy Template Management (Manual); State=Ready}
+@{TaskName=EDP Policy Manager; State=Ready}
+@{TaskName=MareBackup; State=Ready}
+@{TaskName=Microsoft Compatibility Appraiser; State=Ready}
+@{TaskName=PcaPatchDbTask; State=Ready}
+@{TaskName=PcaWallpaperAppDetect; State=Ready}
+@{TaskName=ProgramDataUpdater; State=Ready}
+@{TaskName=StartupAppTask; State=Ready}
+@{TaskName=appuriverifierdaily; State=Ready}
+@{TaskName=appuriverifierinstall; State=Ready}
+@{TaskName=CleanupTemporaryState; State=Ready}
+@{TaskName=DsSvcCleanup; State=Ready}
+@{TaskName=Backup; State=Ready}
+@{TaskName=BackupNonMaintenance; State=Ready}
+@{TaskName=UCPD velocity; State=Ready}
+@{TaskName=Proxy; State=Ready}
+@{TaskName=BitLocker Encrypt All Drives; State=Ready}
+@{TaskName=BitLocker MDM policy Refresh; State=Ready}
+@{TaskName=UninstallDeviceTask; State=Ready}
+@{TaskName=BgTaskRegistrationMaintenanceTask; State=Ready}
+@{TaskName=AikCertEnrollTask; State=Ready}
+@{TaskName=CryptoPolicyTask; State=Ready}
+@{TaskName=KeyPreGenTask; State=Ready}
+@{TaskName=SystemTask; State=Ready}
+@{TaskName=UserTask; State=Ready}
+@{TaskName=UserTask-Roam; State=Ready}
+@{TaskName=ProactiveScan; State=Ready}
+@{TaskName=SyspartRepair; State=Ready}
+@{TaskName=ClipESU; State=Ready}
+@{TaskName=ClipESUConsumer; State=Ready}
+@{TaskName=ClipESUConsumerProcessECUpdate; State=Ready}
+@{TaskName=ClipEsuConsumerProcessPreOrder; State=Ready}
+@{TaskName=ClipEsuConsumerProcessRefund; State=Ready}
+@{TaskName=EnableClipESU; State=Ready}
+@{TaskName=CreateObjectTask; State=Ready}
+@{TaskName=Backup; State=Ready}
+@{TaskName=UnifiedConsentSyncTask; State=Ready}
+@{TaskName=Consolidator; State=Ready}
+@{TaskName=UsbCeip; State=Ready}
+@{TaskName=Data Integrity Check And Scan; State=Ready}
+@{TaskName=Data Integrity Scan; State=Ready}
+@{TaskName=Data Integrity Scan for Crash Recovery; State=Ready}
+@{TaskName=ScheduledDefrag; State=Ready}
+@{TaskName=Device; State=Ready}
+@{TaskName=Device User; State=Ready}
+@{TaskName=Metadata Refresh; State=Ready}
+@{TaskName=HandleCommand; State=Ready}
+@{TaskName=HandleWnsCommand; State=Ready}
+@{TaskName=LocateCommandUserSession; State=Ready}
+@{TaskName=RegisterDeviceAccountChange; State=Ready}
+@{TaskName=RegisterDeviceLocationRightsChange; State=Ready}
+@{TaskName=RegisterDevicePeriodic24; State=Ready}
+@{TaskName=RegisterDevicePolicyChange; State=Ready}
+@{TaskName=RegisterDeviceProtectionStateChanged; State=Ready}
+@{TaskName=RegisterDeviceSettingChange; State=Ready}
+@{TaskName=RegisterDeviceWnsFallback; State=Ready}
+@{TaskName=RegisterUserDevice; State=Ready}
+@{TaskName=RecommendedTroubleshootingScanner; State=Ready}
+@{TaskName=Scheduled; State=Ready}
+@{TaskName=DirectXDatabaseUpdater; State=Ready}
+@{TaskName=DXGIAdapterCache; State=Ready}
+@{TaskName=SilentCleanup; State=Ready}
+@{TaskName=Diagnostics; State=Ready}
+@{TaskName=StorageSense; State=Ready}
+@{TaskName=dusmtask; State=Ready}
+@{TaskName=EDP App Launch Task; State=Ready}
+@{TaskName=EDP Auth Task; State=Ready}
+@{TaskName=EDP Inaccessible Credentials Task; State=Ready}
+@{TaskName=StorageCardEncryption Task; State=Ready}
+@{TaskName=ExploitGuard MDM policy Refresh; State=Ready}
+@{TaskName=DmClient; State=Ready}
+@{TaskName=DmClientOnScenarioDownload; State=Ready}
+@{TaskName=File History (maintenance mode); State=Ready}
+@{TaskName=ReconcileFeatures; State=Ready}
+@{TaskName=UsageDataFlushing; State=Ready}
+@{TaskName=UsageDataReporting; State=Ready}
+@{TaskName=RefreshCache; State=Ready}
+@{TaskName=FODCleanupTask; State=Ready}
+@{TaskName=LocalUserSyncDataAvailable; State=Ready}
+@{TaskName=MouseSyncDataAvailable; State=Ready}
+@{TaskName=PenSyncDataAvailable; State=Ready}
+@{TaskName=TouchpadSyncDataAvailable; State=Ready}
+@{TaskName=ScanForUpdates; State=Ready}
+@{TaskName=ScanForUpdatesAsUser; State=Ready}
+@{TaskName=SmartRetry; State=Ready}
+@{TaskName=Synchronize Language Settings; State=Ready}
+@{TaskName=Installation; State=Ready}
+@{TaskName=ReconcileLanguageResources; State=Ready}
+@{TaskName=TempSignedLicenseExchange; State=Ready}
+@{TaskName=Notifications; State=Ready}
+@{TaskName=WindowsActionDialog; State=Ready}
+@{TaskName=WinSAT; State=Ready}
+@{TaskName=Cellular; State=Ready}
+@{TaskName=Logon; State=Ready}
+@{TaskName=MapsToastTask; State=Ready}
+@{TaskName=ProcessMemoryDiagnosticEvents; State=Ready}
+@{TaskName=MNO Metadata Parser; State=Ready}
+@{TaskName=LPRemove; State=Ready}
+@{TaskName=SystemSoundsService; State=Running}
+@{TaskName=GatherNetworkInfo; State=Ready}
+@{TaskName=WiFiTask; State=Ready}
+@{TaskName=Secure-Boot-Update; State=Ready}
+@{TaskName=Sqm-Tasks; State=Ready}
+@{TaskName=Device Install Group Policy; State=Ready}
+@{TaskName=Device Install Reboot Required; State=Ready}
+@{TaskName=Sysprep Generalize Drivers; State=Ready}
+@{TaskName=AnalyzeSystem; State=Ready}
+@{TaskName=EduPrintProv; State=Ready}
+@{TaskName=PrinterCleanupTask; State=Ready}
+@{TaskName=LoginCheck; State=Ready}
+@{TaskName=Registration; State=Ready}
+@{TaskName=MobilityManager; State=Ready}
+@{TaskName=RegIdleBackup; State=Ready}
+@{TaskName=RemoteAssistanceTask; State=Ready}
+@{TaskName=StartComponentCleanup; State=Ready}
+@{TaskName=BackgroundUploadTask; State=Ready}
+@{TaskName=NetworkStateChangeTask; State=Ready}
+@{TaskName=CreateObjectTask; State=Ready}
+@{TaskName=FamilySafetyMonitor; State=Ready}
+@{TaskName=FamilySafetyRefreshTask; State=Ready}
+@{TaskName=IndexerAutomaticMaintenance; State=Ready}
+@{TaskName=ThemesSyncedImageDownload; State=Ready}
+@{TaskName=UpdateUserPictureTask; State=Ready}
+@{TaskName=SvcRestartTask; State=Ready}
+@{TaskName=SpaceAgentTask; State=Ready}
+@{TaskName=SpaceManagerTask; State=Ready}
+@{TaskName=SpeechModelDownloadTask; State=Ready}
+@{TaskName=MaintenanceTasks; State=Ready}
+@{TaskName=Storage Tiers Management Initialization; State=Ready}
+@{TaskName=EnableLicenseAcquisition; State=Ready}
+@{TaskName=ResPriStaticDbSync; State=Ready}
+@{TaskName=WsSwapAssessmentTask; State=Ready}
+@{TaskName=SR; State=Ready}
+@{TaskName=Interactive; State=Ready}
+@{TaskName=MsCtfMonitor; State=Ready}
+@{TaskName=ForceSynchronizeTime; State=Ready}
+@{TaskName=SynchronizeTime; State=Ready}
+@{TaskName=SynchronizeTimeZone; State=Ready}
+@{TaskName=Tpm-HASCertRetr; State=Ready}
+@{TaskName=Tpm-Maintenance; State=Ready}
+@{TaskName=MusUx_UpdateInterval; State=Ready}
+@{TaskName=Report policies; State=Ready}
+@{TaskName=Schedule Scan; State=Ready}
+@{TaskName=Schedule Scan Static Task; State=Ready}
+@{TaskName=Start Oobe Expedite Work; State=Ready}
+@{TaskName=StartOobeAppsScanAfterUpdate; State=Ready}
+@{TaskName=StartOobeAppsScan_LicenseAccepted; State=Ready}
+@{TaskName=UpdateModelTask; State=Ready}
+@{TaskName=USO_UxBroker; State=Ready}
+@{TaskName=UPnPHostConfig; State=Ready}
+@{TaskName=Usb-Notifications; State=Ready}
+@{TaskName=PerformRemediation; State=Ready}
+@{TaskName=WiFiTask; State=Ready}
+@{TaskName=ResolutionHost; State=Ready}
+@{TaskName=Windows Defender Cache Maintenance; State=Ready}
+@{TaskName=Windows Defender Cleanup; State=Ready}
+@{TaskName=Windows Defender Scheduled Scan; State=Ready}
+@{TaskName=Windows Defender Verification; State=Ready}
+@{TaskName=QueueReporting; State=Ready}
+@{TaskName=BfeOnServiceStartTypeChange; State=Ready}
+@{TaskName=UpdateLibrary; State=Ready}
+@{TaskName=Calibration Loader; State=Ready}
+@{TaskName=Refresh Group Policy Cache; State=Ready}
+@{TaskName=Scheduled Start; State=Ready}
+@{TaskName=PLUGScheduler; State=Ready}
+@{TaskName=CacheTask; State=Running}
+@{TaskName=CDSSync; State=Ready}
+@{TaskName=WIM-Hash-Management; State=Ready}
+@{TaskName=Work Folders Logon Synchronization; State=Ready}
+@{TaskName=Work Folders Maintenance Work; State=Ready}
+@{TaskName=NotificationTask; State=Ready}
+@{TaskName=XblGameSaveTask; State=Ready}
