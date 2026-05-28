@@ -1,0 +1,6 @@
+﻿Rust: cargo 1.95.0 (f2d3ce0bd 2026-03-21)
+Python: Python 3.13.13
+Node: v26.2.0
+Claude: 2.1.152 (Claude Code)
+gh: gh version 2.92.0 (2026-04-28)
+cargo check: 48 compile errors in kernel source (toolchain OK, code-level issues in recovery branch)
