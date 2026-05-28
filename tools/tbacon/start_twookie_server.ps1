@@ -42,6 +42,11 @@ if (-not $NoStartServer) {
       }
     }
   }
+  # Charger le contenu du .p8 dans APNS_KEY_PEM (le backend lit le PEM, pas le chemin)
+  $keyPath = $env:APNS_KEY_PATH
+  if ($keyPath -and (Test-Path $keyPath)) {
+    $env:APNS_KEY_PEM = Get-Content -Raw -LiteralPath $keyPath
+  }
 
   $OutLog = "$LogDir\twookie_stdout.log"
   $ErrLog = "$LogDir\twookie_stderr.log"
