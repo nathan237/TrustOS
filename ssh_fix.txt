@@ -1,0 +1,13 @@
+﻿sshd status:
+  Name: sshd  Status: Running  StartType: Automatic
+netstat port 22:
+  TCP    0.0.0.0:22             0.0.0.0:0              LISTENING       9352
+  TCP    [::]:22                [::]:0                 LISTENING       9352
+firewall rules SSH:
+  OpenSSH Server | Enabled=True | Inbound
+  OpenSSH SSH Server (sshd) | Enabled=True | Inbound
+  SSH via Tailscale | Enabled=True | Inbound
+host key permissions (SYSTEM-only):
+C:\ProgramData\ssh\ssh_host_ed25519_key NT AUTHORITY\SYSTEM:(F)
+
+1 fichiers correctement traités ; échec du traitement de 0 fichiers
