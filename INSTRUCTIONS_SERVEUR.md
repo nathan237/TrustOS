@@ -127,6 +127,51 @@ cd D:\TrustOS_Dev\TrustOS
 cargo check 2>&1 | tail -5
 ```
 
+### 2.9 — Fix SSH pour acces depuis nate
+
+```powershell
+# 1. Verifier l'etat du service
+Get-Service sshd | Select-Object Name, Status, StartType
+
+# 2. Demarrer et mettre en auto si pas fait
+Start-Service sshd
+Set-Service sshd -StartupType Automatic
+
+# 3. Ajouter regle firewall Tailscale uniquement (subnet 100.64.0.0/10)
+New-NetFirewallRule `
+    -Name "SSH-Tailscale-In" `
+    -DisplayName "SSH via Tailscale" `
+    -Enabled True `
+    -Direction Inbound `
+    -Protocol TCP `
+    -Action Allow `
+    -LocalPort 22 `
+    -RemoteAddress "100.64.0.0/10" `
+    -ErrorAction SilentlyContinue
+
+# 4. Verifier que sshd ecoute
+netstat -ano | findstr ":22"
+
+# 5. Verifier le user SSH autorise
+Get-Content "C:\ProgramData\ssh\sshd_config" | Select-String "Allow|Deny|PasswordAuth|PubkeyAuth"
+```
+
+Committe le resultat :
+```powershell
+"sshd status:" | Out-File ssh_fix.txt
+Get-Service sshd | Add-Content ssh_fix.txt
+"netstat port 22:" | Add-Content ssh_fix.txt
+netstat -ano | findstr ":22" | Add-Content ssh_fix.txt
+"firewall rules SSH:" | Add-Content ssh_fix.txt
+Get-NetFirewallRule | Where-Object { $_.LocalPort -eq 22 -or $_.DisplayName -match "SSH" } | Select-Object DisplayName,Enabled,Direction | Add-Content ssh_fix.txt
+```
+
+```bash
+git add ssh_fix.txt
+git commit -m "migration: ssh fix"
+git push origin recovery/post-crash-20260509
+```
+
 ### 2.8 — Committer le resultat
 
 ```powershell
