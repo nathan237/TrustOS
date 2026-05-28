@@ -1,0 +1,43 @@
+=== VALIDATION TWOOKIE SETUP === 
+ 
+aarch64-unknown-none
+riscv64gc-unknown-none-elf
+x86_64-pc-windows-msvc
+x86_64-unknown-none
+components: 
+rust-src
+llvm-tools-x86_64-pc-windows-msvc
+ 
+twookie-native git log: 
+1449d89 docs: mark ios 1.5.5 testflight release
+d8cb2e2 feat(ios): smooth contact and media workflow
+36caa4a docs: record sync fix TestFlight delivery
+ 
+Python deps: 
+fastapi 0.115.0 uvicorn 0.30.6 OK  
+  
+Firewall TwookieBackend-Tailscale:  
+'brief' n'est pas un argument valide pour cette commande.
+
+fastapi 0.115.0 uvicorn 0.30.6 OK 
+
+Dossierÿ: \
+Nom de la tƒche                          Prochaine ex‚cution    Statut         
+======================================== ====================== ===============
+TwookieBackend                           N/A                    En cours       
+<title>T-Wookie</title>
+.channel-title { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .channel-title { font-size: 14px; }
+        <button class="actionbtn mobile-only" id="mobile-request" title="Nouvelle demande" data-i18n="request">+ Demande</button>
+        <button class="actionbtn" id="top-invite" title="Invitation" data-i18n="invite_btn">Inviter</button>
+        <button class="actionbtn primary-action" id="call-peer" title="Signal appel" data-i18n="call">Appel</button>
+        <button class="actionbtn" id="repo-refresh" title="Synchroniser" data-i18n="sync">Sync</button>
+        <button class="actionbtn" id="purge-chat" title="Effacer le canal" data-i18n="purge">Effacer</button>
+      <button class="ptt" id="ptt" title="Micro"><img src="/assets/twookie-mic.png" alt="Micro"></button>
+      <button class="ptt photo" id="attach-photo" title="Photo" aria-label="Photo"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><path d="M4 17l5-4 3 3 3-4 5 5"></path></svg></button>
+      <button class="ptt attach" id="attach-file" title="Fichier temporaire" aria-label="Fichier temporaire"></button>
+      <button class="send" id="send-message" title="Envoyer" data-i18n="send">Envoyer</button>
+  document.title = total > 0 ? `(${total}) T-Wookie` : "T-Wookie";
+        <div class="channel-title">${peer.display_name || peer.id}</div>
+  $("ptt").title = "Arreter";
+    $("ptt").title = "Micro";
