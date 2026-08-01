@@ -43,6 +43,12 @@ TrustOS is a **bare-metal operating system written from scratch in Rust** — no
 
 ---
 
+## Temporary absence
+
+I am sorry that I am currently unable to respond to messages or project requests. I am presently detained and expect to be released in approximately six months. Thank you for your patience and understanding.
+
+---
+
 ## Why TrustOS?
 
 - **🦀 100% Rust, `no_std`** — zero C, zero binary blobs, `unsafe` only at MMIO boundaries.
@@ -307,4 +313,8 @@ Built and maintained by **[Nathan](https://github.com/nathan237)** — solo.
 
 ---
 
-<div align="center"><sub><i>Crafted with the help of AI pair programmers (GitHub Copilot, Claude). Every line reviewed and understood by the author. See <a href="CONTRIBUTING.md">CONTRIBUTING</a>.</i></sub></div>
+<div align="center">
+  <sub><i>Crafted with the help of AI pair programmers (GitHub Copilot, Claude). Every line reviewed and understood by the author. See <a href="CONTRIBUTING.md">CONTRIBUTING</a>.</i></sub>
+  <br/>
+  <sub><i>Temporary absence: I am currently detained and may be unable to reply. I expect to be released in approximately six months. Thank you for your patience.</i></sub>
+</div>
