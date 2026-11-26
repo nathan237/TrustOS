@@ -27,13 +27,16 @@ use spin::Mutex;
 // see each init step).
 // ============================================================================
 
+/// When set, xHCI log lines also go to the framebuffer console.
 pub static VERBOSE: AtomicBool = AtomicBool::new(false);
 
+/// Turn on-screen xHCI logging on or off (used by `usb init` / `lsusb`).
 pub fn set_verbose(on: bool) {
     VERBOSE.store(on, Ordering::SeqCst);
 }
 
-#[doc(hidden)]
+/// Log one formatted xHCI line: to the screen (which mirrors to serial)
+/// while VERBOSE is set, otherwise to serial only.
 pub fn xlog_fmt(args: core::fmt::Arguments) {
     // println! already mirrors to serial, so use one or the other.
     if VERBOSE.load(Ordering::Relaxed) {
@@ -43,6 +46,7 @@ pub fn xlog_fmt(args: core::fmt::Arguments) {
     }
 }
 
+/// Log a plain xHCI line (see `xlog_fmt`).
 pub fn xlog_line(s: &str) {
     xlog_fmt(format_args!("{}", s));
 }
@@ -383,6 +387,7 @@ pub fn init(bar0: u64) -> bool {
     
     // Capability registers must be read as aligned 32-bit volatile loads
     // (byte/word reads of MMIO are not guaranteed to work, and showed v0.0).
+    // SAFETY: base_virt maps XHCI_MMIO_MAP bytes of the controller BAR (map_mmio succeeded); callers only pass 4-byte-aligned offsets < 0x20 inside the capability block.
     let rd_cap = |off: u64| unsafe { core::ptr::read_volatile((base_virt + off) as *const u32) };
     let cap0 = rd_cap(0x00);
     let caplength = (cap0 & 0xFF) as u64;
@@ -472,8 +477,11 @@ pub fn init(bar0: u64) -> bool {
     // USBCMD/USBSTS are MMIO: every access must be volatile, otherwise the
     // optimizer may hoist the status read out of the polling loop and the
     // loop never sees the hardware change (which made reset "fail").
+    // SAFETY: op_regs = base_virt + CAPLENGTH lies inside the mapped MMIO window (CAPLENGTH < 0x100); addr_of_mut! only computes the field address, no reference to MMIO is created.
     let usbcmd_p = unsafe { core::ptr::addr_of_mut!((*op_regs).usbcmd) };
+    // SAFETY: same as usbcmd_p: field address inside the mapped operational register block.
     let usbsts_p = unsafe { core::ptr::addr_of!((*op_regs).usbsts) };
+    // SAFETY: usbcmd_p/usbsts_p are valid, aligned MMIO register addresses for the lifetime of the mapping; volatile access is required for device registers.
     let rd_cmd = || unsafe { core::ptr::read_volatile(usbcmd_p) };
     let rd_sts = || unsafe { core::ptr::read_volatile(usbsts_p) };
     let wr_cmd = |v: u32| unsafe { core::ptr::write_volatile(usbcmd_p, v) };
@@ -509,6 +517,7 @@ pub fn init(bar0: u64) -> bool {
         xlog!("[xHCI] Reset failed! (USBCMD={:#x} USBSTS={:#x})", rd_cmd(), rd_sts());
         return false;
     }
+    // SAFETY: op_regs points at the mapped operational registers; this reference is only used for one-time setup writes below, the polled registers use the volatile helpers above.
     let op = unsafe { &mut *op_regs };
     
     xlog!("[xHCI] Reset complete");
@@ -645,7 +654,9 @@ fn enumerate_ports() {
     for port_num in 0..controller.max_ports {
         let port_regs = (port_base + (port_num as u64 * 16)) as *mut XhciPortRegs;
         // PORTSC is MMIO: read/write it volatile (it is polled during port reset).
+        // SAFETY: port_regs = op_base + 0x400 + 16*port_num with port_num < MaxPorts, inside the mapped window; only the field address is computed.
         let portsc_p = unsafe { core::ptr::addr_of_mut!((*port_regs).portsc) };
+        // SAFETY: portsc_p is a valid, aligned PORTSC MMIO address; PORTSC must be accessed volatile.
         let rd_portsc = || unsafe { core::ptr::read_volatile(portsc_p) };
         let wr_portsc = |v: u32| unsafe { core::ptr::write_volatile(portsc_p, v) };
 
@@ -748,6 +759,7 @@ pub(crate) fn submit_command(controller: &mut XhciController, trb: Trb) {
         cmd.control &= !TRB_CYCLE;
     }
     
+    // SAFETY: idx = cmd_enqueue < 255 (wrapped above), so the slot is in bounds of the 256-entry ring; volatile because the controller reads it by DMA.
     unsafe { ptr::write_volatile(&mut controller.cmd_ring.trbs[idx] as *mut Trb, cmd); }
     controller.last_cmd_phys = controller.cmd_ring_phys + (idx as u64) * 16;
 
@@ -778,6 +790,7 @@ impl XhciController {
     /// QEMU only because QEMU completes commands synchronously).
     #[inline]
     pub(crate) fn read_event(&self, idx: usize) -> Trb {
+        // SAFETY: idx is always event_dequeue < 256 (wrapped in pop_event); the ring is written by the controller via DMA, so the read must be volatile.
         unsafe { ptr::read_volatile(&self.event_ring[idx] as *const Trb) }
     }
 
@@ -794,6 +807,9 @@ impl XhciController {
         }
         let erdp_phys = self.event_ring_phys + (self.event_dequeue as u64 * 16);
         let intr_regs = (self.runtime_base + 0x20) as *mut XhciIntrRegs;
+        // SAFETY: runtime_base + 0x20 is interrupter 0's register set inside the
+        // mapped MMIO window (RTSOFF was bounds-checked at init); ERDP is an
+        // aligned 64-bit register and must be written volatile.
         unsafe {
             ptr::write_volatile(ptr::addr_of_mut!((*intr_regs).erdp), erdp_phys | (1 << 3)); // EHB
         }
@@ -897,12 +913,14 @@ impl TransferRing {
         }
         // The controller reads these by DMA: write volatile and fence so the
         // TRB is in memory before the doorbell write that follows.
+        // SAFETY: enqueue < 255 is maintained below (wraps to 0 at 255), so the index is in bounds; volatile because the controller reads the ring by DMA.
         unsafe { ptr::write_volatile(&mut self.trbs[self.enqueue] as *mut Trb, trb); }
         self.enqueue += 1;
         if self.enqueue >= 255 {
             // Link TRB
             let link_ctrl = (TRB_TYPE_LINK << 10) | if self.cycle { TRB_CYCLE } else { 0 } | (1 << 1);
             let link = Trb { parameter: self.phys, status: 0, control: link_ctrl };
+            // SAFETY: index 255 is the last entry of the 256-entry ring, reserved for the Link TRB.
             unsafe { ptr::write_volatile(&mut self.trbs[255] as *mut Trb, link); }
             self.cycle = !self.cycle;
             self.enqueue = 0;
@@ -928,6 +946,7 @@ pub(crate) struct SlotRings {
 // ============================================================================
 
 fn alloc_scratchpad_buffers(controller: &mut XhciController) {
+    // SAFETY: cap_regs points at the mapped capability registers; HCSPARAMS2 is an aligned dword read volatile.
     let hcsparams2 = unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*controller.cap_regs).hcsparams2)) };
     
     let hi = ((hcsparams2 >> 21) & 0x1F) as u32;
@@ -1004,6 +1023,7 @@ fn address_device(controller: &mut XhciController, slot_id: u8, port_num: u8, sp
         Some(p) => p,
         None => { xlog!("[xHCI] OOM for device context"); return false; }
     };
+    // SAFETY: slot_id comes from Enable Slot and is <= MaxSlots (<= 255), within the 256-entry DCBAA; volatile because the controller reads the DCBAA by DMA.
     unsafe { ptr::write_volatile(&mut controller.dcbaa[slot_id as usize] as *mut u64, dev_ctx_phys); }
     controller.device_contexts[slot_id as usize] = None;
     
@@ -1259,6 +1279,7 @@ fn get_device_descriptor(controller: &mut XhciController, slot_id: u8, dev: &mut
             (USB_DT_DEVICE as u16) << 8,
             0, 8, buf_phys,
         ).is_some() {
+            // SAFETY: buf_virt is a whole 4 KB page we own (alloc_frame_zeroed); offset 7 is within the 8 bytes just transferred.
             let mps0 = unsafe { *buf_virt.add(7) } as u16;
             if matches!(mps0, 8 | 16 | 32 | 64) && mps0 != 8 {
                 if evaluate_ep0_mps(controller, slot_id, mps0) {
@@ -1308,6 +1329,8 @@ fn evaluate_ep0_mps(controller: &mut XhciController, slot_id: u8, mps: u16) -> b
     };
     let input_virt = phys_to_virt(input_phys);
     let ctx_size = controller.context_size as u64;
+    // SAFETY: input_virt is a zeroed 4 KB page we own; the writes touch the
+    // input control context and EP0 context at offsets < 3*64 bytes.
     unsafe {
         let icc = input_virt as *mut u32;
         ptr::write_volatile(icc.add(1), 1 << 1); // add flag: EP0 (DCI 1)
@@ -2110,6 +2133,7 @@ pub fn poll_hid_devices() {
         if cc == 1 || cc == 13 { // Success or Short Packet
             let got = (len as u32).saturating_sub(residual).min(len as u32) as usize;
             let report = unsafe {
+                // SAFETY: buf_phys is our own 4 KB DMA page and got <= len <= 64, so the slice is in bounds; the controller finished writing it (transfer event received).
                 core::slice::from_raw_parts(phys_to_virt(buf_phys) as *const u8, got)
             };
             // Log the first few reports so a serial capture shows input is flowing.
@@ -2126,6 +2150,7 @@ pub fn poll_hid_devices() {
         }
         // Re-queue with the same buffer (cleared). On error codes we still
         // re-arm; a stalled endpoint simply won't complete again.
+        // SAFETY: buf_phys is our own 4 KB page and len <= 64; the controller is not using it (its transfer completed and it is not yet re-queued).
         unsafe { core::ptr::write_bytes(phys_to_virt(buf_phys) as *mut u8, 0, len as usize); }
         let queued = {
             let ctrl = CONTROLLER.lock();
@@ -2167,6 +2192,8 @@ pub fn shutdown() {
     {
         let mut ctrl = CONTROLLER.lock();
         if let Some(c) = ctrl.as_mut() {
+            // SAFETY: op_regs points at the controller's mapped operational
+            // registers, valid while CONTROLLER holds it; volatile MMIO access.
             unsafe {
                 let usbcmd_p = core::ptr::addr_of_mut!((*c.op_regs).usbcmd);
                 let usbsts_p = core::ptr::addr_of!((*c.op_regs).usbsts);
