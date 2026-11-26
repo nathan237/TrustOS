@@ -195,6 +195,10 @@ fn render_track(track: &Track, bpm: u32, start_tick: u32, total_samples: usize) 
     let mut temp_stereo = vec![0i16; 2]; // Single sample stereo buffer
 
     for sample in 0..total_samples {
+        // Long renders: feed the APIC watchdog about once per second of audio.
+        if sample % 48_000 == 0 {
+            crate::apic::watchdog_kick(8_000);
+        }
         // Process all events at this sample position
         while event_idx < events.len() && events[event_idx].sample_pos <= sample {
             let ev = &events[event_idx];
@@ -236,9 +240,15 @@ pub fn render_project(project: &Project, mixer: &Mixer, bpm: u32, start_tick: u3
     }
 
     // Render each track to its own mono buffer
+    // Rendering a whole song can take several seconds of integer DSP; keep
+    // the always-on APIC watchdog fed so it doesn't reboot mid-render.
     let track_buffers: Vec<Vec<i32>> = project.tracks.iter()
-        .map(|track| render_track(track, bpm, start_tick, total_samples))
+        .map(|track| {
+            crate::apic::watchdog_kick(8_000);
+            render_track(track, bpm, start_tick, total_samples)
+        })
         .collect();
+    crate::apic::watchdog_kick(8_000);
 
     // Mix all tracks into stereo output
     let mut output = vec![0i16; total_samples * 2];

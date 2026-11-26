@@ -1339,6 +1339,10 @@ impl HdaController {
     // ═════════════════════════════════════════════════════════════════════════
 
     fn delay_us(us: u64) {
+        // Blocking playback (e.g. TrustDAW `play`) waits here for the whole
+        // song; feed the always-on APIC watchdog so a long song doesn't
+        // reboot the machine after ~8 s.
+        crate::apic::watchdog_kick(8_000);
         // Simple busy-wait delay using port 0x80 (POST code, ~1µs per access)
         for _ in 0..us {
             unsafe {
