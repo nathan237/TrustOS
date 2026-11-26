@@ -146,8 +146,36 @@ pub fn read_track_table() -> Result<DiskTrackTable, &'static str> {
     }
 }
 
-/// Load a specific track by index from the audio disk.
+// ---------------------------------------------------------------------------
+// Boot-module tracks: WAV files the bootloader loaded into memory.
+// Used when there is no TWAV data disk (real machines: NVMe/USB, no AHCI
+// data disk). Add to limine.conf under the boot entry, e.g.:
+//     module_path: boot():/music/song.wav
+//     module_cmdline: music:My Song
+// ---------------------------------------------------------------------------
+
+static BOOT_TRACKS: spin::Mutex<Vec<(&'static [u8], String)>> = spin::Mutex::new(Vec::new());
+
+/// Register a WAV that the bootloader loaded as a module.
+pub fn register_boot_track(data: &'static [u8], name: &str) {
+    crate::serial_println!("[DISK-AUDIO] Boot-module track '{}': {} bytes", name, data.len());
+    BOOT_TRACKS.lock().push((data, String::from(name)));
+}
+
+fn boot_track_names() -> Vec<String> {
+    BOOT_TRACKS.lock().iter().map(|(_, n)| n.clone()).collect()
+}
+
+/// Load a specific track by index: from the TWAV data disk if present,
+/// otherwise from WAVs loaded as boot modules.
 pub fn load_track_from_disk(track_idx: usize) -> Result<(Vec<u8>, String), &'static str> {
+    if read_track_table().is_err() {
+        let tracks = BOOT_TRACKS.lock();
+        return match tracks.get(track_idx) {
+            Some((data, name)) => Ok((Vec::from(*data), name.clone())),
+            None => Err("No track with that number (no data disk, no boot-module WAVs)"),
+        };
+    }
     let table = read_track_table()?;
     if track_idx >= table.tracks.len() {
         return Err("Track index out of range");
@@ -212,7 +240,7 @@ fn load_track_data(track: &TrackInfo) -> Result<(Vec<u8>, String), &'static str>
 
 /// Get the number of tracks on the audio disk (0 if no disk).
 pub fn track_count() -> usize {
-    read_track_table().map(|t| t.tracks.len()).unwrap_or(0)
+    read_track_table().map(|t| t.tracks.len()).unwrap_or_else(|_| BOOT_TRACKS.lock().len())
 }
 
 /// Legacy compatibility: load first track as before.
@@ -225,6 +253,6 @@ pub fn load_wav_from_disk() -> Result<Vec<u8>, &'static str> {
 pub fn get_track_names() -> Vec<String> {
     match read_track_table() {
         Ok(table) => table.tracks.iter().map(|t| t.name.clone()).collect(),
-        Err(_) => Vec::new(),
+        Err(_) => boot_track_names(),
     }
 }

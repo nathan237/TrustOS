@@ -1002,6 +1002,9 @@ pub fn get_backbuffer_info() -> Option<(*mut u8, u32, u32, u32)> {
 /// Upgrade #6: Row-diff MMIO — only copies rows that changed since last frame,
 /// reducing MMIO volume by 40-70% for typical desktop animations.
 pub fn swap_buffers() {
+    // Presenting a frame proves the UI loop is alive: feed the always-on
+    // APIC watchdog (otherwise any full-screen app reboots after ~8 s).
+    crate::apic::watchdog_kick(8_000);
     let addr = FB_ADDR.load(Ordering::Relaxed);
     let width = FB_WIDTH.load(Ordering::Relaxed) as usize;
     let height = FB_HEIGHT.load(Ordering::Relaxed) as usize;
