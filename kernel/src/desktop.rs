@@ -17053,7 +17053,16 @@ pub fn run() {
     crate::serial_println!("[GUI] Starting desktop environment...");
     crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start, Win+T/E/I/L/D/H, Win+1..9, Ctrl+Alt+Del, F1/F11/F12, ESC");
     crate::serial_println!("[GUI] Target: ~60 FPS (16.6ms) with spin-loop frame limiting");
-    
+
+    // USB HID (mouse/keyboard) via xHCI. Init is deferred at boot because
+    // early MMIO mapping can fault on some boards; by the time the desktop
+    // runs, memory is fully set up. Machines whose BIOS can't emulate PS/2
+    // for USB (UEFI-only laptops) need this for a USB mouse.
+    if !crate::drivers::xhci::is_initialized() {
+        let ok = crate::drivers::init_xhci_deferred();
+        crate::serial_println!("[GUI] USB (xHCI) init for HID input: {}", if ok { "OK" } else { "unavailable" });
+    }
+
     // Frame counter for safe startup (skip heavy work on first few frames)
     let mut loop_frame: u32 = 0;
 
@@ -17069,6 +17078,14 @@ pub fn run() {
         // Input Processing
         // ═══════════════════════════════════════════════════════════════
         
+        // Liveness for the always-on APIC watchdog. The shell loop kicks it via
+        // remoteshell::poll(); the desktop loop must too, or the machine
+        // reboots ~8 s after the desktop opens (seen as "the window closes").
+        crate::apic::watchdog_kick(8_000);
+
+        // Pull any pending USB HID reports (non-blocking) into the mouse/keyboard queues
+        crate::drivers::xhci::poll_hid_devices();
+
         // Process mouse
         let mouse = crate::mouse::get_state();
         update_cursor(mouse.x, mouse.y);

@@ -417,37 +417,48 @@ pub fn init(bar0: u64) -> bool {
         }
     }
 
-    // Halt controller if running
-    let op = unsafe { &mut *op_regs };
-    if (op.usbsts & USBSTS_HCH) == 0 {
+    // Halt controller if running.
+    // USBCMD/USBSTS are MMIO: every access must be volatile, otherwise the
+    // optimizer may hoist the status read out of the polling loop and the
+    // loop never sees the hardware change (which made reset "fail").
+    let usbcmd_p = unsafe { core::ptr::addr_of_mut!((*op_regs).usbcmd) };
+    let usbsts_p = unsafe { core::ptr::addr_of!((*op_regs).usbsts) };
+    let rd_cmd = || unsafe { core::ptr::read_volatile(usbcmd_p) };
+    let rd_sts = || unsafe { core::ptr::read_volatile(usbsts_p) };
+    let wr_cmd = |v: u32| unsafe { core::ptr::write_volatile(usbcmd_p, v) };
+
+    if (rd_sts() & USBSTS_HCH) == 0 {
         crate::serial_println!("[xHCI] Halting controller...");
-        op.usbcmd &= !USBCMD_RUN;
-        
-        // Wait for halt (max ~100ms)
-        for _ in 0..100 {
-            if (op.usbsts & USBSTS_HCH) != 0 {
+        wr_cmd(rd_cmd() & !USBCMD_RUN);
+
+        // Wait for halt (spec: within 16 ms; allow ~1 s)
+        for _ in 0..1000 {
+            if (rd_sts() & USBSTS_HCH) != 0 {
                 break;
             }
-            for _ in 0..10000 { core::hint::spin_loop(); }
+            crate::cpu::tsc::delay_millis(1);
         }
     }
-    
+
     // Reset controller
     crate::serial_println!("[xHCI] Resetting controller...");
-    op.usbcmd |= USBCMD_HCRST;
-    
-    // Wait for reset to complete (max ~100ms)
-    for _ in 0..100 {
-        if (op.usbcmd & USBCMD_HCRST) == 0 && (op.usbsts & USBSTS_CNR) == 0 {
+    wr_cmd(rd_cmd() | USBCMD_HCRST);
+    // Some controllers must not be touched for a moment after HCRST.
+    crate::cpu::tsc::delay_millis(1);
+
+    // Wait for reset to complete (allow ~1 s; real hardware can take tens of ms)
+    for _ in 0..1000 {
+        if (rd_cmd() & USBCMD_HCRST) == 0 && (rd_sts() & USBSTS_CNR) == 0 {
             break;
         }
-        for _ in 0..10000 { core::hint::spin_loop(); }
+        crate::cpu::tsc::delay_millis(1);
     }
-    
-    if (op.usbcmd & USBCMD_HCRST) != 0 || (op.usbsts & USBSTS_CNR) != 0 {
-        crate::serial_println!("[xHCI] Reset failed!");
+
+    if (rd_cmd() & USBCMD_HCRST) != 0 || (rd_sts() & USBSTS_CNR) != 0 {
+        crate::serial_println!("[xHCI] Reset failed! (USBCMD={:#x} USBSTS={:#x})", rd_cmd(), rd_sts());
         return false;
     }
+    let op = unsafe { &mut *op_regs };
     
     crate::serial_println!("[xHCI] Reset complete");
     
@@ -494,17 +505,17 @@ pub fn init(bar0: u64) -> bool {
     intr.imod = 0;
     
     // Enable interrupts and run
-    op.usbcmd = USBCMD_RUN | USBCMD_INTE;
-    
-    // Wait for controller to start
+    wr_cmd(USBCMD_RUN | USBCMD_INTE);
+
+    // Wait for controller to start (volatile reads, ~1 s max)
     for _ in 0..1000 {
-        if (op.usbsts & USBSTS_HCH) == 0 {
+        if (rd_sts() & USBSTS_HCH) == 0 {
             break;
         }
-        for _ in 0..10000 { core::hint::spin_loop(); }
+        crate::cpu::tsc::delay_millis(1);
     }
-    
-    if (op.usbsts & USBSTS_HCH) != 0 {
+
+    if (rd_sts() & USBSTS_HCH) != 0 {
         crate::serial_println!("[xHCI] Failed to start controller");
         return false;
     }
@@ -581,9 +592,12 @@ fn enumerate_ports() {
     
     for port_num in 0..controller.max_ports {
         let port_regs = (port_base + (port_num as u64 * 16)) as *mut XhciPortRegs;
-        let port = unsafe { &mut *port_regs };
-        
-        let portsc = port.portsc;
+        // PORTSC is MMIO: read/write it volatile (it is polled during port reset).
+        let portsc_p = unsafe { core::ptr::addr_of_mut!((*port_regs).portsc) };
+        let rd_portsc = || unsafe { core::ptr::read_volatile(portsc_p) };
+        let wr_portsc = |v: u32| unsafe { core::ptr::write_volatile(portsc_p, v) };
+
+        let portsc = rd_portsc();
         
         // Check if device connected
         if (portsc & PORTSC_CCS) != 0 {
@@ -600,27 +614,29 @@ fn enumerate_ports() {
                 port_num + 1, speed_str);
             
             // Clear status change bits
-            port.portsc = portsc | PORTSC_CSC | PORTSC_PRC;
-            
+            // (PED is write-1-to-disable: never write it back as 1, or an
+            // already-enabled USB 3 port gets switched off.)
+            wr_portsc((portsc & !PORTSC_PED) | PORTSC_CSC | PORTSC_PRC);
+
             // If not enabled, try to reset and enable
             if (portsc & PORTSC_PED) == 0 {
                 crate::serial_println!("[xHCI] Port {}: Resetting...", port_num + 1);
-                
+
                 // Trigger port reset
-                port.portsc = (portsc & !PORTSC_PED) | PORTSC_PR;
-                
-                // Wait for reset to complete
-                for _ in 0..100 {
-                    for _ in 0..100000 { core::hint::spin_loop(); }
-                    let new_portsc = port.portsc;
+                wr_portsc((portsc & !PORTSC_PED) | PORTSC_PR);
+
+                // Wait for reset to complete (USB 2 reset ~50 ms; allow 500 ms)
+                for _ in 0..500 {
+                    crate::cpu::tsc::delay_millis(1);
+                    let new_portsc = rd_portsc();
                     if (new_portsc & PORTSC_PR) == 0 && (new_portsc & PORTSC_PRC) != 0 {
                         // Clear PRC
-                        port.portsc = new_portsc | PORTSC_PRC;
+                        wr_portsc((new_portsc & !PORTSC_PED) | PORTSC_PRC);
                         break;
                     }
                 }
-                
-                let final_portsc = port.portsc;
+
+                let final_portsc = rd_portsc();
                 if (final_portsc & PORTSC_PED) != 0 {
                     crate::serial_println!("[xHCI] Port {}: Enabled after reset", port_num + 1);
                     
@@ -1697,9 +1713,27 @@ fn setup_devices() {
             if let Some(all_interfaces) = get_config_descriptor(controller, slot_id) {
                 let mut ms_in: Option<(u8, u16)> = None;
                 let mut ms_out: Option<(u8, u16)> = None;
-                
+
+                // Each slot has room for one interrupt-IN ring, so configure a
+                // single HID interface per device. Composite receivers (e.g. a
+                // wireless keyboard+mouse dongle) expose several; prefer the
+                // boot mouse, then boot keyboard, then the first HID interface.
+                let hid_pick: Option<u8> = {
+                    let hids = all_interfaces.iter().filter(|e| e.0 == 0x03);
+                    let mut mouse = None; let mut kbd = None; let mut first = None;
+                    for e in hids {
+                        if first.is_none() { first = Some(e.1); }
+                        if e.3 == 2 && mouse.is_none() { mouse = Some(e.1); }
+                        if e.3 == 1 && kbd.is_none() { kbd = Some(e.1); }
+                    }
+                    mouse.or(kbd).or(first)
+                };
+
                 for &(iface_class, iface_num, subclass, protocol, ep_addr, max_packet, interval) in &all_interfaces {
                     match iface_class {
+                        0x03 if Some(iface_num) != hid_pick => {
+                            crate::serial_println!("[xHCI] Skipping extra HID interface {} on slot {}", iface_num, slot_id);
+                        }
                         0x03 => {
                             // HID device
                             let _ = set_boot_protocol(controller, slot_id, iface_num);
@@ -1710,7 +1744,10 @@ fn setup_devices() {
                                 ep_addr, max_packet, interval,
                             );
                             
-                            if controller.devices[i].class == 0 {
+                            // Device class is usually 0 (per-interface) or 0xEF
+                            // (composite/IAD) for HID devices; record the HID
+                            // interface we configured so the poller finds it.
+                            if matches!(controller.devices[i].class, 0x00 | 0x03 | 0xEF) {
                                 controller.devices[i].class = 0x03;
                                 controller.devices[i].subclass = subclass;
                                 controller.devices[i].protocol = protocol;
@@ -1845,9 +1882,22 @@ pub fn bulk_transfer_in(slot_id: u8, dci: u8, buf_phys: u64, length: u32) -> Opt
     None
 }
 
-/// Poll all HID devices once for input reports
+/// One outstanding interrupt-IN transfer per HID slot:
+/// (DMA buffer phys addr, buffer length, HID boot protocol 1=kbd 2=mouse).
+/// The buffer stays allocated while the TRB is queued, so the controller
+/// never DMAs into freed memory.
+static HID_PENDING: Mutex<[Option<(u64, u16, u8)>; 256]> = Mutex::new([None; 256]);
+
+/// Poll USB HID devices for input reports. Non-blocking: call it every
+/// frame. Keeps one interrupt-IN transfer queued per HID device, drains any
+/// completed Transfer Events from the event ring, dispatches the reports to
+/// the mouse/keyboard layers, then re-queues the transfer.
 pub fn poll_hid_devices() {
-    // Collect HID device info under lock, then release
+    if !is_initialized() {
+        return;
+    }
+
+    // HID slots and their protocol.
     let hid_devices: Vec<(u8, u16, u8)> = {
         let ctrl = CONTROLLER.lock();
         match ctrl.as_ref() {
@@ -1858,68 +1908,112 @@ pub fn poll_hid_devices() {
             None => return,
         }
     };
-    
+    if hid_devices.is_empty() {
+        return;
+    }
+
+    // 1. Make sure every HID slot has a transfer queued.
     for &(slot_id, max_packet_size, protocol) in &hid_devices {
+        let already = HID_PENDING.lock()[slot_id as usize].is_some();
+        if already {
+            continue;
+        }
         let buf_phys = match crate::memory::frame::alloc_frame_zeroed() {
             Some(p) => p,
             None => continue,
         };
-        let buf_virt = phys_to_virt(buf_phys);
-        let max_pkt = max_packet_size.max(8);
-        
-        // Queue interrupt IN transfer (requires lock)
-        {
+        let len = max_packet_size.clamp(8, 64);
+        let queued = {
             let ctrl = CONTROLLER.lock();
-            if let Some(controller) = ctrl.as_ref() {
-                if !queue_interrupt_in(controller, slot_id, buf_phys, max_pkt) {
-                    crate::memory::frame::free_frame(buf_phys);
-                    continue;
-                }
-            } else {
-                crate::memory::frame::free_frame(buf_phys);
-                continue;
+            match ctrl.as_ref() {
+                Some(controller) => queue_interrupt_in(controller, slot_id, buf_phys, len),
+                None => false,
+            }
+        };
+        if queued {
+            HID_PENDING.lock()[slot_id as usize] = Some((buf_phys, len, protocol));
+        } else {
+            crate::memory::frame::free_frame(buf_phys);
+        }
+    }
+
+    // 2. Drain completed events (bounded, never waits).
+    let mut completed: Vec<(u8, u8, u32)> = Vec::new(); // (slot, completion code, residual)
+    {
+        let mut ctrl = CONTROLLER.lock();
+        let controller = match ctrl.as_mut() {
+            Some(c) => c,
+            None => return,
+        };
+        let mut advanced = false;
+        for _ in 0..64 {
+            let idx = controller.event_dequeue;
+            let trb = controller.event_ring[idx];
+            let phase = (trb.control & TRB_CYCLE) != 0;
+            if phase != controller.event_cycle {
+                break; // ring empty
+            }
+            controller.event_dequeue += 1;
+            if controller.event_dequeue >= 256 {
+                controller.event_dequeue = 0;
+                controller.event_cycle = !controller.event_cycle;
+            }
+            advanced = true;
+
+            let trb_type = (trb.control >> 10) & 0x3F;
+            if trb_type == TRB_TYPE_TRANSFER_EVENT {
+                let slot = (trb.control >> 24) as u8;
+                let cc = ((trb.status >> 24) & 0xFF) as u8;
+                let residual = trb.status & 0x00FF_FFFF;
+                completed.push((slot, cc, residual));
             }
         }
-        
-        // Poll for completion (with short timeout for non-blocking behavior)
-        {
-            let mut ctrl2 = CONTROLLER.lock();
-            if let Some(controller) = ctrl2.as_mut() {
-                for _ in 0..50_000u32 {
-                    let idx = controller.event_dequeue;
-                    let trb = controller.event_ring[idx];
-                    let phase = (trb.control & TRB_CYCLE) != 0;
-                    if phase == controller.event_cycle {
-                        controller.event_dequeue += 1;
-                        if controller.event_dequeue >= 256 {
-                            controller.event_dequeue = 0;
-                            controller.event_cycle = !controller.event_cycle;
-                        }
-                        let erdp = controller.event_ring_phys + (controller.event_dequeue as u64 * 16);
-                        let intr = (controller.runtime_base + 0x20) as *mut XhciIntrRegs;
-                        unsafe { (*intr).erdp = erdp | (1 << 3); }
-                        
-                        let cc = ((trb.status >> 24) & 0xFF) as u8;
-                        if cc == 1 || cc == 13 { // Success or Short Packet
-                            let report = unsafe {
-                                core::slice::from_raw_parts(buf_virt as *const u8, max_pkt as usize)
-                            };
-                            
-                            match protocol {
-                                1 => process_keyboard_report(report),
-                                2 => process_mouse_report(report),
-                                _ => {}
-                            }
-                        }
-                        break;
-                    }
-                    core::hint::spin_loop();
-                }
+        if advanced {
+            let erdp = controller.event_ring_phys + (controller.event_dequeue as u64 * 16);
+            let intr = (controller.runtime_base + 0x20) as *mut XhciIntrRegs;
+            unsafe { (*intr).erdp = erdp | (1 << 3); }
+        }
+    }
+
+    // 3. Dispatch reports and re-queue.
+    for (slot, cc, residual) in completed {
+        let pending = HID_PENDING.lock()[slot as usize].take();
+        let (buf_phys, len, protocol) = match pending {
+            Some(p) => p,
+            None => continue, // not one of ours
+        };
+        if cc == 1 || cc == 13 { // Success or Short Packet
+            let got = (len as u32).saturating_sub(residual).min(len as u32) as usize;
+            let report = unsafe {
+                core::slice::from_raw_parts(phys_to_virt(buf_phys) as *const u8, got)
+            };
+            // Log the first few reports so a serial capture shows input is flowing.
+            static LOGGED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+            if LOGGED.fetch_add(1, Ordering::Relaxed) < 5 {
+                crate::serial_println!("[xHCI] HID report slot {} proto {} len {}: {:02x?}",
+                    slot, protocol, got, report);
+            }
+            match protocol {
+                1 => process_keyboard_report(report),
+                2 => process_mouse_report(report),
+                _ => {}
             }
         }
-        
-        crate::memory::frame::free_frame(buf_phys);
-        return; // Only poll one device per call to avoid blocking
+        // Re-queue with the same buffer (cleared). On error codes we still
+        // re-arm; a stalled endpoint simply won't complete again.
+        unsafe { core::ptr::write_bytes(phys_to_virt(buf_phys) as *mut u8, 0, len as usize); }
+        let queued = {
+            let ctrl = CONTROLLER.lock();
+            match ctrl.as_ref() {
+                Some(controller) => queue_interrupt_in(controller, slot, buf_phys, len),
+                None => false,
+            }
+        };
+        if queued {
+            HID_PENDING.lock()[slot as usize] = Some((buf_phys, len, protocol));
+        } else {
+            crate::memory::frame::free_frame(buf_phys);
+        }
     }
 }
 
