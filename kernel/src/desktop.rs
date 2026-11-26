@@ -17062,6 +17062,20 @@ pub fn run() {
         let ok = crate::drivers::init_xhci_deferred();
         crate::serial_println!("[GUI] USB (xHCI) init for HID input: {}", if ok { "OK" } else { "unavailable" });
     }
+    {
+        // Tell the user (no serial port on most laptops) what USB input found.
+        let hid = crate::drivers::xhci::hid_device_count();
+        let (title, msg, prio) = if !crate::drivers::xhci::is_initialized() {
+            ("USB", "USB did not start - run `usb init` in the shell to see why",
+             crate::gui::engine::NotifyPriority::Warning)
+        } else if hid == 0 {
+            ("USB", "USB started, but no USB mouse/keyboard found",
+             crate::gui::engine::NotifyPriority::Warning)
+        } else {
+            ("USB", "USB mouse/keyboard ready", crate::gui::engine::NotifyPriority::Success)
+        };
+        crate::gui::engine::show_toast(title, msg, prio);
+    }
 
     // Frame counter for safe startup (skip heavy work on first few frames)
     let mut loop_frame: u32 = 0;

@@ -22,6 +22,38 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
 
 // ============================================================================
+// Logging: always to serial; also to the screen while VERBOSE is set
+// (`usb init` turns it on so bare-metal machines without a serial port can
+// see each init step).
+// ============================================================================
+
+pub static VERBOSE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_verbose(on: bool) {
+    VERBOSE.store(on, Ordering::SeqCst);
+}
+
+#[doc(hidden)]
+pub fn xlog_fmt(args: core::fmt::Arguments) {
+    // println! already mirrors to serial, so use one or the other.
+    if VERBOSE.load(Ordering::Relaxed) {
+        crate::println!("{}", args);
+    } else {
+        crate::serial_println!("{}", args);
+    }
+}
+
+pub fn xlog_line(s: &str) {
+    xlog_fmt(format_args!("{}", s));
+}
+
+macro_rules! xlog {
+    ($($arg:tt)*) => {
+        $crate::drivers::xhci::xlog_fmt(format_args!($($arg)*))
+    };
+}
+
+// ============================================================================
 // xHCI Register Structures
 // ============================================================================
 
@@ -315,57 +347,74 @@ pub fn phys_to_virt(phys: u64) -> u64 {
 /// Initialize xHCI controller
 pub fn init(bar0: u64) -> bool {
     if bar0 == 0 || bar0 == 0xFFFFFFFF {
-        crate::serial_println!("[xHCI] Invalid BAR0");
+        xlog!("[xHCI] Invalid BAR0");
         return false;
     }
     
-    crate::serial_println!("[xHCI] Initializing controller at phys {:#x}", bar0);
+    xlog!("[xHCI] Initializing controller at phys {:#x}", bar0);
     
-    // Map MMIO region
-    let base_virt = match crate::memory::map_mmio(bar0, 0x4000) {
+    // Map MMIO region. 64 KB covers capability, operational, port, runtime
+    // and doorbell registers on every controller seen so far (the old 16 KB
+    // could leave the doorbell/runtime area unmapped on some chipsets).
+    const XHCI_MMIO_MAP: u64 = 0x10000;
+    let base_virt = match crate::memory::map_mmio(bar0, XHCI_MMIO_MAP as usize) {
         Ok(v) => v,
         Err(e) => {
-            crate::serial_println!("[xHCI] Failed to map MMIO: {}", e);
+            xlog!("[xHCI] Failed to map MMIO: {}", e);
             return false;
         }
     };
     
-    crate::serial_println!("[xHCI] Mapped to virt {:#x}", base_virt);
+    xlog!("[xHCI] Mapped to virt {:#x}", base_virt);
     
     // Safety probe: check if MMIO is actually accessible before dereferencing
     let probe = unsafe { core::ptr::read_volatile(base_virt as *const u32) };
     if probe == 0xFFFFFFFF {
-        crate::serial_println!("[xHCI] MMIO probe failed (read {:#x}) — controller unreachable", probe);
+        xlog!("[xHCI] MMIO probe failed (read {:#x}) — controller unreachable", probe);
         return false;
     }
-    crate::serial_println!("[xHCI] MMIO probe OK (first dword={:#x})", probe);
+    xlog!("[xHCI] MMIO probe OK (first dword={:#x})", probe);
     
     // Read capability registers
     let cap_regs = base_virt as *mut XhciCapRegs;
     let cap = unsafe { &*cap_regs };
     
-    let caplength = cap.caplength as u64;
-    let version = cap.hciversion;
-    let max_slots = cap.max_slots();
-    let max_ports = cap.max_ports();
-    let context_size = cap.context_size();
-    
-    crate::serial_println!("[xHCI] Version: {}.{}", version >> 8, version & 0xFF);
-    crate::serial_println!("[xHCI] Max slots: {}, Max ports: {}, Context size: {}", 
+    // Capability registers must be read as aligned 32-bit volatile loads
+    // (byte/word reads of MMIO are not guaranteed to work, and showed v0.0).
+    let rd_cap = |off: u64| unsafe { core::ptr::read_volatile((base_virt + off) as *const u32) };
+    let cap0 = rd_cap(0x00);
+    let caplength = (cap0 & 0xFF) as u64;
+    let version = (cap0 >> 16) as u16;
+    let hcsparams1 = rd_cap(0x04);
+    let hccparams1 = rd_cap(0x10);
+    let dboff = rd_cap(0x14) & !0x3;
+    let rtsoff = rd_cap(0x18) & !0x1F;
+    let max_slots = (hcsparams1 & 0xFF) as u8;
+    let max_ports = ((hcsparams1 >> 24) & 0xFF) as u8;
+    let context_size = if (hccparams1 & (1 << 2)) != 0 { 64 } else { 32 };
+    let _ = cap;
+
+    xlog!("[xHCI] Version: {:x}.{:02x}  caplen={:#x} dboff={:#x} rtsoff={:#x}",
+        version >> 8, version & 0xFF, caplength, dboff, rtsoff);
+    xlog!("[xHCI] Max slots: {}, Max ports: {}, Context size: {}",
         max_slots, max_ports, context_size);
-    
+    if caplength == 0 || dboff as u64 + 0x400 > XHCI_MMIO_MAP || rtsoff as u64 + 0x40 > XHCI_MMIO_MAP {
+        xlog!("[xHCI] Register layout outside the mapped window; aborting");
+        return false;
+    }
+
     // Get operational registers base
     let op_base = base_virt + caplength;
     let op_regs = op_base as *mut XhciOpRegs;
-    
+
     // Get doorbell and runtime register bases
-    let doorbell_base = base_virt + (cap.dboff as u64);
-    let runtime_base = base_virt + (cap.rtsoff as u64);
+    let doorbell_base = base_virt + (dboff as u64);
+    let runtime_base = base_virt + (rtsoff as u64);
     
     // ---- xHCI BIOS/OS Handoff (USBLEGSUP) ----
     // Walk Extended Capabilities to find USB Legacy Support and claim ownership
     // before we halt/reset.  Without this, BIOS SMI handlers may interfere.
-    let xecp = ((cap.hccparams1 >> 16) & 0xFFFF) as u64;
+    let xecp = ((hccparams1 >> 16) & 0xFFFF) as u64;
     if xecp != 0 {
         let mut ecap_ptr = base_virt + (xecp << 2);
         for _ in 0..32 {
@@ -375,11 +424,11 @@ pub fn init(bar0: u64) -> bool {
 
             if ecap_id == 1 {
                 // USB Legacy Support capability (USBLEGSUP)
-                crate::serial_println!("[xHCI] Found USBLEGSUP at offset {:#x}", ecap_ptr - base_virt);
+                xlog!("[xHCI] Found USBLEGSUP at offset {:#x}", ecap_ptr - base_virt);
 
                 let bios_owns = (ecap_val >> 16) & 1;
                 if bios_owns != 0 {
-                    crate::serial_println!("[xHCI] BIOS owns controller, requesting handoff...");
+                    xlog!("[xHCI] BIOS owns controller, requesting handoff...");
 
                     // Set OS Owned Semaphore (bit 24)
                     unsafe { core::ptr::write_volatile(ecap_ptr as *mut u32, ecap_val | (1 << 24)); }
@@ -390,13 +439,13 @@ pub fn init(bar0: u64) -> bool {
                         let v = unsafe { core::ptr::read_volatile(ecap_ptr as *const u32) };
                         if (v >> 16) & 1 == 0 {
                             ok = true;
-                            crate::serial_println!("[xHCI] BIOS handoff complete ({}ms)", i);
+                            xlog!("[xHCI] BIOS handoff complete ({}ms)", i);
                             break;
                         }
                         for _ in 0..10000 { core::hint::spin_loop(); }
                     }
                     if !ok {
-                        crate::serial_println!("[xHCI] WARNING: BIOS handoff timed out, forcing");
+                        xlog!("[xHCI] WARNING: BIOS handoff timed out, forcing");
                         let v = unsafe { core::ptr::read_volatile(ecap_ptr as *const u32) };
                         unsafe { core::ptr::write_volatile(ecap_ptr as *mut u32, (v & !(1u32 << 16)) | (1 << 24)); }
                     }
@@ -405,9 +454,9 @@ pub fn init(bar0: u64) -> bool {
                     // zero all enable bits (0, 4, 13-15), status bits are W1C so 0 = no change
                     let ctlsts_ptr = (ecap_ptr + 4) as *mut u32;
                     unsafe { core::ptr::write_volatile(ctlsts_ptr, 0); }
-                    crate::serial_println!("[xHCI] USB SMI disabled");
+                    xlog!("[xHCI] USB SMI disabled");
                 } else {
-                    crate::serial_println!("[xHCI] No BIOS ownership, handoff not needed");
+                    xlog!("[xHCI] No BIOS ownership, handoff not needed");
                 }
                 break;
             }
@@ -428,7 +477,7 @@ pub fn init(bar0: u64) -> bool {
     let wr_cmd = |v: u32| unsafe { core::ptr::write_volatile(usbcmd_p, v) };
 
     if (rd_sts() & USBSTS_HCH) == 0 {
-        crate::serial_println!("[xHCI] Halting controller...");
+        xlog!("[xHCI] Halting controller...");
         wr_cmd(rd_cmd() & !USBCMD_RUN);
 
         // Wait for halt (spec: within 16 ms; allow ~1 s)
@@ -441,7 +490,7 @@ pub fn init(bar0: u64) -> bool {
     }
 
     // Reset controller
-    crate::serial_println!("[xHCI] Resetting controller...");
+    xlog!("[xHCI] Resetting controller...");
     wr_cmd(rd_cmd() | USBCMD_HCRST);
     // Some controllers must not be touched for a moment after HCRST.
     crate::cpu::tsc::delay_millis(1);
@@ -455,12 +504,12 @@ pub fn init(bar0: u64) -> bool {
     }
 
     if (rd_cmd() & USBCMD_HCRST) != 0 || (rd_sts() & USBSTS_CNR) != 0 {
-        crate::serial_println!("[xHCI] Reset failed! (USBCMD={:#x} USBSTS={:#x})", rd_cmd(), rd_sts());
+        xlog!("[xHCI] Reset failed! (USBCMD={:#x} USBSTS={:#x})", rd_cmd(), rd_sts());
         return false;
     }
     let op = unsafe { &mut *op_regs };
     
-    crate::serial_println!("[xHCI] Reset complete");
+    xlog!("[xHCI] Reset complete");
     
     // Allocate DCBAA (Device Context Base Address Array)
     let mut dcbaa = Box::new([0u64; 256]);
@@ -516,11 +565,11 @@ pub fn init(bar0: u64) -> bool {
     }
 
     if (rd_sts() & USBSTS_HCH) != 0 {
-        crate::serial_println!("[xHCI] Failed to start controller");
+        xlog!("[xHCI] Failed to start controller");
         return false;
     }
     
-    crate::serial_println!("[xHCI] Controller running");
+    xlog!("[xHCI] Controller running");
     
     // Create device contexts array (all None initially)
     const NONE_CTX: Option<Box<DeviceContext>> = None;
@@ -588,7 +637,7 @@ fn enumerate_ports() {
     let port_base = controller.base_virt + 
         (unsafe { &*controller.cap_regs }.caplength as u64) + 0x400;
     
-    crate::serial_println!("[xHCI] Enumerating {} ports...", controller.max_ports);
+    xlog!("[xHCI] Enumerating {} ports...", controller.max_ports);
     
     for port_num in 0..controller.max_ports {
         let port_regs = (port_base + (port_num as u64 * 16)) as *mut XhciPortRegs;
@@ -610,7 +659,7 @@ fn enumerate_ports() {
                 _ => "Unknown",
             };
             
-            crate::serial_println!("[xHCI] Port {}: Device connected, speed: {}", 
+            xlog!("[xHCI] Port {}: Device connected, speed: {}", 
                 port_num + 1, speed_str);
             
             // Clear status change bits
@@ -620,7 +669,7 @@ fn enumerate_ports() {
 
             // If not enabled, try to reset and enable
             if (portsc & PORTSC_PED) == 0 {
-                crate::serial_println!("[xHCI] Port {}: Resetting...", port_num + 1);
+                xlog!("[xHCI] Port {}: Resetting...", port_num + 1);
 
                 // Trigger port reset
                 wr_portsc((portsc & !PORTSC_PED) | PORTSC_PR);
@@ -638,7 +687,7 @@ fn enumerate_ports() {
 
                 let final_portsc = rd_portsc();
                 if (final_portsc & PORTSC_PED) != 0 {
-                    crate::serial_println!("[xHCI] Port {}: Enabled after reset", port_num + 1);
+                    xlog!("[xHCI] Port {}: Enabled after reset", port_num + 1);
                     
                     // Record device
                     controller.devices.push(XhciDevice {
@@ -657,7 +706,7 @@ fn enumerate_ports() {
                     });
                 }
             } else {
-                crate::serial_println!("[xHCI] Port {}: Already enabled", port_num + 1);
+                xlog!("[xHCI] Port {}: Already enabled", port_num + 1);
                 
                 controller.devices.push(XhciDevice {
                     slot_id: 0,
@@ -677,7 +726,7 @@ fn enumerate_ports() {
         }
     }
     
-    crate::serial_println!("[xHCI] Found {} connected devices", controller.devices.len());
+    xlog!("[xHCI] Found {} connected devices", controller.devices.len());
 }
 
 // ============================================================================
@@ -849,8 +898,7 @@ pub(crate) struct SlotRings {
 // ============================================================================
 
 fn alloc_scratchpad_buffers(controller: &mut XhciController) {
-    let cap = unsafe { &*controller.cap_regs };
-    let hcsparams2 = cap.hcsparams2;
+    let hcsparams2 = unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*controller.cap_regs).hcsparams2)) };
     
     let hi = ((hcsparams2 >> 21) & 0x1F) as u32;
     let lo = ((hcsparams2 >> 27) & 0x1F) as u32;
@@ -860,12 +908,12 @@ fn alloc_scratchpad_buffers(controller: &mut XhciController) {
         return;
     }
     
-    crate::serial_println!("[xHCI] Allocating {} scratchpad buffers", num_bufs);
+    xlog!("[xHCI] Allocating {} scratchpad buffers", num_bufs);
     
     // Allocate scratchpad buffer array (array of physical page addresses)
     let array_phys = match crate::memory::frame::alloc_frame_zeroed() {
         Some(p) => p,
-        None => { crate::serial_println!("[xHCI] OOM for scratchpad array"); return; }
+        None => { xlog!("[xHCI] OOM for scratchpad array"); return; }
     };
     let array_virt = phys_to_virt(array_phys) as *mut u64;
     
@@ -907,10 +955,10 @@ fn enable_slot(controller: &mut XhciController) -> Option<u8> {
     
     if let Some((cc, slot_id, _param)) = wait_command_completion(controller) {
         if cc == 1 { // Success
-            crate::serial_println!("[xHCI] Enable Slot → slot_id={}", slot_id);
+            xlog!("[xHCI] Enable Slot → slot_id={}", slot_id);
             return Some(slot_id);
         }
-        crate::serial_println!("[xHCI] Enable Slot failed: cc={}", cc);
+        xlog!("[xHCI] Enable Slot failed: cc={}", cc);
     }
     None
 }
@@ -929,14 +977,14 @@ fn address_device(controller: &mut XhciController, slot_id: u8, port_num: u8, sp
     // Allocate transfer ring for EP0 (control endpoint, DCI=1)
     let ep0_ring = match TransferRing::new() {
         Some(r) => r,
-        None => { crate::serial_println!("[xHCI] OOM for EP0 ring"); return false; }
+        None => { xlog!("[xHCI] OOM for EP0 ring"); return false; }
     };
     let ep0_ring_phys = ep0_ring.phys;
     
     // Allocate input context (on heap, page-aligned conceptually)
     let input_ctx_phys = match crate::memory::frame::alloc_frame_zeroed() {
         Some(p) => p,
-        None => { crate::serial_println!("[xHCI] OOM for input context"); return false; }
+        None => { xlog!("[xHCI] OOM for input context"); return false; }
     };
     let input_ctx_virt = phys_to_virt(input_ctx_phys);
     let ctx_size = controller.context_size;
@@ -1010,11 +1058,11 @@ fn address_device(controller: &mut XhciController, slot_id: u8, port_num: u8, sp
     
     if let Some((cc, _sid, _param)) = wait_command_completion(controller) {
         if cc == 1 {
-            crate::serial_println!("[xHCI] Address Device slot {} → success", slot_id);
+            xlog!("[xHCI] Address Device slot {} → success", slot_id);
             crate::memory::frame::free_frame(input_ctx_phys);
             return true;
         }
-        crate::serial_println!("[xHCI] Address Device failed: cc={}", cc);
+        xlog!("[xHCI] Address Device failed: cc={}", cc);
     }
     crate::memory::frame::free_frame(input_ctx_phys);
     false
@@ -1102,7 +1150,7 @@ fn control_transfer_in(
         if cc == 1 || cc == 13 { // Success or Short Packet
             return Some(transfer_len);
         }
-        crate::serial_println!("[xHCI] Control IN failed: cc={}", cc);
+        xlog!("[xHCI] Control IN failed: cc={}", cc);
     }
     None
 }
@@ -1185,7 +1233,7 @@ fn get_device_descriptor(controller: &mut XhciController, slot_id: u8, dev: &mut
             dev.product_id = ptr::read_unaligned(buf_virt.add(10) as *const u16);
             dev.num_configs = *buf_virt.add(17);
         }
-        crate::serial_println!("[xHCI] Device: VID={:04X} PID={:04X} class={:02X}:{:02X}:{:02X}",
+        xlog!("[xHCI] Device: VID={:04X} PID={:04X} class={:02X}:{:02X}:{:02X}",
             dev.vendor_id, dev.product_id, dev.class, dev.subclass, dev.protocol);
     }
     
@@ -1248,11 +1296,11 @@ fn get_config_descriptor(controller: &mut XhciController, slot_id: u8)
                 current_iface = (iface_class, iface_num, iface_subclass, iface_protocol);
                 
                 if iface_class == 0x03 {
-                    crate::serial_println!("[xHCI]   HID interface {}: subclass={} protocol={} ({})",
+                    xlog!("[xHCI]   HID interface {}: subclass={} protocol={} ({})",
                         iface_num, iface_subclass, iface_protocol,
                         match iface_protocol { 1 => "keyboard", 2 => "mouse", _ => "other" });
                 } else if iface_class == 0x08 {
-                    crate::serial_println!("[xHCI]   Mass Storage interface {}: subclass={:#x} protocol={:#x}",
+                    xlog!("[xHCI]   Mass Storage interface {}: subclass={:#x} protocol={:#x}",
                         iface_num, iface_subclass, iface_protocol);
                 }
             }
@@ -1390,10 +1438,10 @@ fn configure_hid_endpoint(
     
     let success = if let Some((cc, _, _)) = wait_command_completion(controller) {
         if cc == 1 {
-            crate::serial_println!("[xHCI] Configure Endpoint slot {} DCI {} → success", slot_id, dci);
+            xlog!("[xHCI] Configure Endpoint slot {} DCI {} → success", slot_id, dci);
             true
         } else {
-            crate::serial_println!("[xHCI] Configure Endpoint failed: cc={}", cc);
+            xlog!("[xHCI] Configure Endpoint failed: cc={}", cc);
             false
         }
     } else {
@@ -1493,11 +1541,11 @@ fn configure_bulk_endpoints(
     
     let success = if let Some((cc, _, _)) = wait_command_completion(controller) {
         if cc == 1 {
-            crate::serial_println!("[xHCI] Bulk endpoints configured: slot {} IN_DCI={} OUT_DCI={}",
+            xlog!("[xHCI] Bulk endpoints configured: slot {} IN_DCI={} OUT_DCI={}",
                 slot_id, dci_in, dci_out);
             true
         } else {
-            crate::serial_println!("[xHCI] Configure bulk EPs failed: cc={}", cc);
+            xlog!("[xHCI] Configure bulk EPs failed: cc={}", cc);
             false
         }
     } else {
@@ -1677,7 +1725,7 @@ fn setup_devices() {
             return;
         }
         
-        crate::serial_println!("[xHCI] Setting up {} devices...", num_devices);
+        xlog!("[xHCI] Setting up {} devices...", num_devices);
         
         // Process each device: Enable Slot → Address → Get descriptors
         for i in 0..num_devices {
@@ -1688,7 +1736,7 @@ fn setup_devices() {
             let slot_id = match enable_slot(controller) {
                 Some(id) => id,
                 None => {
-                    crate::serial_println!("[xHCI] Failed to enable slot for port {}", port);
+                    xlog!("[xHCI] Failed to enable slot for port {}", port);
                     continue;
                 }
             };
@@ -1697,14 +1745,14 @@ fn setup_devices() {
             
             // Address Device
             if !address_device(controller, slot_id, port, speed) {
-                crate::serial_println!("[xHCI] Failed to address device on port {}", port);
+                xlog!("[xHCI] Failed to address device on port {}", port);
                 continue;
             }
             
             // Get Device Descriptor
             let mut dev = controller.devices[i].clone();
             if !get_device_descriptor(controller, slot_id, &mut dev) {
-                crate::serial_println!("[xHCI] Failed to get device descriptor for slot {}", slot_id);
+                xlog!("[xHCI] Failed to get device descriptor for slot {}", slot_id);
                 continue;
             }
             controller.devices[i] = dev;
@@ -1732,7 +1780,7 @@ fn setup_devices() {
                 for &(iface_class, iface_num, subclass, protocol, ep_addr, max_packet, interval) in &all_interfaces {
                     match iface_class {
                         0x03 if Some(iface_num) != hid_pick => {
-                            crate::serial_println!("[xHCI] Skipping extra HID interface {} on slot {}", iface_num, slot_id);
+                            xlog!("[xHCI] Skipping extra HID interface {} on slot {}", iface_num, slot_id);
                         }
                         0x03 => {
                             // HID device
@@ -1753,7 +1801,7 @@ fn setup_devices() {
                                 controller.devices[i].protocol = protocol;
                             }
                             
-                            crate::serial_println!("[xHCI] HID endpoint configured: slot {} EP {:#x} max_pkt {} interval {}",
+                            xlog!("[xHCI] HID endpoint configured: slot {} EP {:#x} max_pkt {} interval {}",
                                 slot_id, ep_addr, max_packet, interval);
                         }
                         0x08 => {
@@ -1783,7 +1831,7 @@ fn setup_devices() {
             }
         }
         
-        crate::serial_println!("[xHCI] Device setup complete");
+        xlog!("[xHCI] Device setup complete");
     }
     
     // Initialize mass storage devices outside CONTROLLER lock
@@ -1990,7 +2038,7 @@ pub fn poll_hid_devices() {
             // Log the first few reports so a serial capture shows input is flowing.
             static LOGGED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
             if LOGGED.fetch_add(1, Ordering::Relaxed) < 5 {
-                crate::serial_println!("[xHCI] HID report slot {} proto {} len {}: {:02x?}",
+                xlog!("[xHCI] HID report slot {} proto {} len {}: {:02x?}",
                     slot, protocol, got, report);
             }
             match protocol {
@@ -2024,6 +2072,44 @@ pub fn poll_hid_devices() {
 /// Check if xHCI is initialized
 pub fn is_initialized() -> bool {
     INITIALIZED.load(Ordering::SeqCst)
+}
+
+/// Number of devices we configured as HID (mouse/keyboard).
+pub fn hid_device_count() -> usize {
+    let ctrl = CONTROLLER.lock();
+    match ctrl.as_ref() {
+        Some(c) => c.devices.iter().filter(|d| d.slot_id != 0 && d.class == 0x03).count(),
+        None => 0,
+    }
+}
+
+/// Stop the controller and forget its state so another controller can be
+/// brought up. DMA rings are dropped only after the controller is halted.
+pub fn shutdown() {
+    INITIALIZED.store(false, Ordering::SeqCst);
+    {
+        let mut ctrl = CONTROLLER.lock();
+        if let Some(c) = ctrl.as_mut() {
+            unsafe {
+                let usbcmd_p = core::ptr::addr_of_mut!((*c.op_regs).usbcmd);
+                let usbsts_p = core::ptr::addr_of!((*c.op_regs).usbsts);
+                core::ptr::write_volatile(usbcmd_p, core::ptr::read_volatile(usbcmd_p) & !USBCMD_RUN);
+                for _ in 0..100 {
+                    if core::ptr::read_volatile(usbsts_p) & USBSTS_HCH != 0 { break; }
+                    crate::cpu::tsc::delay_millis(1);
+                }
+            }
+        }
+        *ctrl = None;
+    }
+    SLOT_RINGS.lock().clear();
+    // Outstanding HID buffers belonged to the halted controller; leak them
+    // rather than risk a late DMA write into reused memory.
+    let mut pending = HID_PENDING.lock();
+    for e in pending.iter_mut() {
+        *e = None;
+    }
+    xlog!("[xHCI] Controller stopped");
 }
 
 /// Get number of connected USB devices
