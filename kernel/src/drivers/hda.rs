@@ -320,6 +320,13 @@ pub struct HdaController {
 /// Global HDA controller instance
 static HDA: Mutex<Option<HdaController>> = Mutex::new(None);
 static HDA_INITIALIZED: AtomicBool = AtomicBool::new(false);
+/// PCI address (bus, device, function) of the active controller.
+static HDA_ACTIVE_BDF: Mutex<Option<(u8, u8, u8)>> = Mutex::new(None);
+
+/// PCI address of the controller currently in use, if any.
+pub fn active_bdf() -> Option<(u8, u8, u8)> {
+    *HDA_ACTIVE_BDF.lock()
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MMIO Helpers
@@ -1365,18 +1372,72 @@ impl HdaController {
 // Public API
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Initialize the HDA driver (called during boot or on-demand)
-pub fn init() -> Result<(), &'static str> {
-    // Find Intel HDA device (class 0x04, subclass 0x03)
-    let devices = crate::pci::find_by_class(crate::pci::class::MULTIMEDIA);
-    let hda_dev = devices.iter()
-        .find(|d| d.subclass == 0x03) // Audio device (HDA subclass)
-        .or_else(|| devices.iter().find(|d| d.subclass == 0x01)) // Also try multimedia audio
-        .ok_or("HDA: no Intel HDA device found on PCI bus")?
-        .clone();
+/// PCI vendors whose HDA controllers are GPU HDMI/DisplayPort audio only
+/// (no speakers, headphones or mic). AMD/ATI GPU and NVIDIA.
+const HDMI_ONLY_VENDORS: [u16; 2] = [0x1002, 0x10DE];
 
-    let ctrl = HdaController::init(&hda_dev)?;
+/// All HDA-class audio controllers on the PCI bus, in bus order.
+/// (class 0x04 multimedia, subclass 0x03 HDA; falls back to subclass 0x01.)
+pub fn list_controllers() -> Vec<crate::pci::PciDevice> {
+    let devices = crate::pci::find_by_class(crate::pci::class::MULTIMEDIA);
+    let hda: Vec<crate::pci::PciDevice> =
+        devices.iter().filter(|d| d.subclass == 0x03).cloned().collect();
+    if !hda.is_empty() {
+        return hda;
+    }
+    devices.iter().filter(|d| d.subclass == 0x01).cloned().collect()
+}
+
+/// Whether this controller is a GPU's HDMI/DP audio function.
+pub fn is_hdmi_only(dev: &crate::pci::PciDevice) -> bool {
+    HDMI_ONLY_VENDORS.contains(&dev.vendor_id)
+}
+
+/// Index (into `list_controllers()`) of the controller `init()` picks by
+/// default: the first one that isn't GPU HDMI audio, else the first one.
+pub fn default_controller_index(list: &[crate::pci::PciDevice]) -> Option<usize> {
+    if list.is_empty() {
+        return None;
+    }
+    Some(list.iter().position(|d| !is_hdmi_only(d)).unwrap_or(0))
+}
+
+/// Initialize the HDA driver on the default controller (called during boot or
+/// on demand). Prefers the analog codec controller (speakers/headphones) over
+/// GPU HDMI audio, so laptops with both pick the built-in speakers.
+pub fn init() -> Result<(), &'static str> {
+    let list = list_controllers();
+    let idx = default_controller_index(&list)
+        .ok_or("HDA: no Intel HDA device found on PCI bus")?;
+    init_controller(&list[idx])
+}
+
+/// Initialize (or switch to) the HDA controller at `index` in `list_controllers()`.
+pub fn init_index(index: usize) -> Result<(), &'static str> {
+    let list = list_controllers();
+    let dev = list.get(index).ok_or("HDA: no controller with that number (see `audio list`)")?;
+    init_controller(dev)
+}
+
+fn init_controller(dev: &crate::pci::PciDevice) -> Result<(), &'static str> {
+    // If another controller is already active, stop its DMA before switching.
+    if HDA_INITIALIZED.load(Ordering::SeqCst) {
+        let mut hda = HDA.lock();
+        if let Some(old) = hda.as_mut() {
+            old.play(false);
+        }
+        *hda = None;
+        HDA_INITIALIZED.store(false, Ordering::SeqCst);
+        *HDA_ACTIVE_BDF.lock() = None;
+    }
+
+    crate::serial_println!("[HDA] Selected controller {:02X}:{:02X}.{} {:04X}:{:04X}{}",
+        dev.bus, dev.device, dev.function, dev.vendor_id, dev.device_id,
+        if is_hdmi_only(dev) { " (GPU HDMI audio)" } else { "" });
+
+    let ctrl = HdaController::init(dev)?;
     *HDA.lock() = Some(ctrl);
+    *HDA_ACTIVE_BDF.lock() = Some((dev.bus, dev.device, dev.function));
     HDA_INITIALIZED.store(true, Ordering::SeqCst);
 
     Ok(())
