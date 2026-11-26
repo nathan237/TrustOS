@@ -1388,6 +1388,17 @@ pub unsafe extern "C" fn kmain() -> ! {
                     // Save pointer — RamFS not yet initialized, will copy after Phase 16
                     serial_println!("[JARVIS] Boot module: {} bytes brain weights (deferred to RamFS)", size);
                     unsafe { JARVIS_BRAIN_MODULE = Some(data); }
+                } else if cmdline.starts_with("music") || path.to_ascii_lowercase().ends_with(".wav") {
+                    // WAV for the desktop Music player (no data disk needed).
+                    // cmdline "music:Title" sets the shown title; else use the file name.
+                    #[cfg(feature = "daw")]
+                    {
+                        let title = match cmdline.strip_prefix("music:") {
+                            Some(t) if !t.is_empty() => t,
+                            _ => path.rsplit('/').next().unwrap_or("Track"),
+                        };
+                        trustdaw::disk_audio::register_boot_track(data, title);
+                    }
                 } else if cmdline.contains("iwlwifi") || path.contains("iwlwifi") || path.contains(".ucode") {
                     // WiFi firmware module — store for driver initialization
                     serial_println!("[WIFI] Firmware module: {} bytes at {:p}", size, addr);

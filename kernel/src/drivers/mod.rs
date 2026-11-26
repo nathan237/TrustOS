@@ -42,39 +42,78 @@ pub struct XhciPciInfo {
 }
 
 static XHCI_PCI_INFO: Mutex<Option<XhciPciInfo>> = Mutex::new(None);
+/// Every xHCI controller found on the PCI bus, in bus order.
+static XHCI_ALL: Mutex<Vec<XhciPciInfo>> = Mutex::new(Vec::new());
 
 /// Check if xHCI was detected (but not yet initialized)
 pub fn xhci_detected() -> bool {
     XHCI_PCI_INFO.lock().is_some()
 }
 
-/// Initialize xHCI on demand (called from shell `usb` command)
+/// All detected xHCI controllers.
+pub fn xhci_controllers() -> Vec<XhciPciInfo> {
+    XHCI_ALL.lock().clone()
+}
+
+/// Initialize xHCI on demand: tries each detected controller in order and
+/// keeps the first that comes up with a HID device; otherwise the first that
+/// comes up at all.
 pub fn init_xhci_deferred() -> bool {
-    let info = match XHCI_PCI_INFO.lock().clone() {
+    if xhci::is_initialized() {
+        xhci::xlog_line("[xHCI] Already initialized");
+        return true;
+    }
+    let all = xhci_controllers();
+    if all.is_empty() {
+        xhci::xlog_line("[xHCI] No xHCI controller detected on the PCI bus");
+        return false;
+    }
+    for i in 0..all.len() {
+        if init_xhci_index(i) {
+            if xhci::hid_device_count() > 0 || i + 1 == all.len() {
+                return true;
+            }
+            // Came up but no HID device here: try the next controller.
+            xhci::xlog_line("[xHCI] No HID device on this controller, trying the next one");
+            xhci::shutdown();
+        }
+    }
+    // Last resort: bring up the first controller that works, even without HID.
+    for i in 0..all.len() {
+        if init_xhci_index(i) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Initialize the xHCI controller number `index` (see `xhci_controllers()`).
+pub fn init_xhci_index(index: usize) -> bool {
+    let info = match xhci_controllers().get(index).cloned() {
         Some(i) => i,
         None => {
-            crate::serial_println!("[xHCI] No xHCI controller detected");
+            xhci::xlog_line("[xHCI] No controller with that number");
             return false;
         }
     };
-    
     if xhci::is_initialized() {
-        crate::serial_println!("[xHCI] Already initialized");
-        return true;
+        xhci::shutdown();
     }
-    
-    crate::serial_println!("[xHCI] Deferred init: BAR0={:#x}", info.bar0);
-    
+    crate::drivers::xhci::xlog_fmt(format_args!(
+        "[xHCI] Controller {} at {:02X}:{:02X}.{}  BAR0={:#x}",
+        index, info.bus, info.device, info.function, info.bar0));
+
     // Enable PCI bus mastering + memory space via raw config writes
     let cmd = crate::pci::config_read16(info.bus, info.device, info.function, 0x04);
-    crate::pci::config_write(info.bus, info.device, info.function, 0x04, 
+    crate::pci::config_write(info.bus, info.device, info.function, 0x04,
         (cmd | 0x06) as u32); // Bus Master + Memory Space
-    
+
     if xhci::init(info.bar0) {
-        crate::serial_println!("[xHCI] Initialized with {} devices", xhci::device_count());
+        crate::drivers::xhci::xlog_fmt(format_args!(
+            "[xHCI] Initialized with {} device(s), {} HID", xhci::device_count(), xhci::hid_device_count()));
         true
     } else {
-        crate::serial_println!("[xHCI] Init failed");
+        xhci::xlog_line("[xHCI] Init failed");
         false
     }
 }
@@ -288,11 +327,21 @@ pub fn probe_storage() {
                 // Remember PCI info for deferred init
                 let bar0 = dev.bar_address(0).unwrap_or(dev.bar[0] as u64);
                 crate::serial_println!("[xHCI] Deferring init (BAR0={:#x}) — use `usb` command", bar0);
-                // Store for later
-                *XHCI_PCI_INFO.lock() = Some(XhciPciInfo {
+                // Store for later (keep every controller; laptops often have two)
+                let info = XhciPciInfo {
                     bus: dev.bus, device: dev.device, function: dev.function,
                     bar0,
-                });
+                };
+                {
+                    let mut all = XHCI_ALL.lock();
+                    if !all.iter().any(|x| x.bus == info.bus && x.device == info.device && x.function == info.function) {
+                        all.push(info.clone());
+                    }
+                }
+                let mut first = XHCI_PCI_INFO.lock();
+                if first.is_none() {
+                    *first = Some(info);
+                }
             }
         }
     }

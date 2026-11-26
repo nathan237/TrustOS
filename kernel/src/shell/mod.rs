@@ -1226,6 +1226,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "exec" | "run" | "./" => vm::cmd_exec(args, command),
         "elfinfo" => vm::cmd_elfinfo(args),
         "lsusb" => unix::cmd_lsusb(),
+        "usb" => unix::cmd_usb(args),
         "checkm8" => {
             let arg_str = args.join(" ");
             let result = crate::drivers::checkm8::run_exploit(&arg_str);

@@ -1189,6 +1189,11 @@ pub fn read_line_hidden(buffer: &mut [u8]) -> usize {
 /// Try to read a key without blocking (returns scancode as ASCII equivalent)
 /// Returns None if no key available
 pub fn try_read_key() -> Option<u8> {
+    // Interactive full-screen loops (TrustDAW GUI, piano roll, studio...) poll
+    // here. Polling for input proves the loop is alive, so feed the always-on
+    // APIC watchdog; otherwise it reboots the machine ~8 s after such a loop
+    // starts (it was only fed from the shell loop).
+    crate::apic::watchdog_kick(8_000);
     read_char()
 }
 

@@ -2678,10 +2678,59 @@ pub(super) fn cmd_reset() {
     crate::println!("Terminal reset.");
 }
 
+/// `usb list` / `usb init [n]` / `usb status`
+pub(super) fn cmd_usb(args: &[&str]) {
+    match args.first().copied() {
+        Some("list") | None => {
+            let all = crate::drivers::xhci_controllers();
+            if all.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No xHCI (USB 3) controllers found on the PCI bus");
+                return;
+            }
+            crate::println_color!(COLOR_CYAN, "xHCI controllers:");
+            for (i, c) in all.iter().enumerate() {
+                crate::println!("  {}: {:02X}:{:02X}.{}  BAR0={:#x}", i, c.bus, c.device, c.function, c.bar0);
+            }
+            crate::println!("USB running: {}  HID devices: {}",
+                crate::drivers::xhci::is_initialized(), crate::drivers::xhci::hid_device_count());
+            crate::println!("Start with: usb init [n]   (prints every step)");
+        }
+        Some("init") => {
+            crate::drivers::xhci::set_verbose(true);
+            let ok = match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
+                Some(n) => crate::drivers::init_xhci_index(n),
+                None => {
+                    if crate::drivers::xhci::is_initialized() {
+                        crate::drivers::xhci::shutdown();
+                    }
+                    crate::drivers::init_xhci_deferred()
+                }
+            };
+            crate::drivers::xhci::set_verbose(false);
+            if ok {
+                crate::println_color!(COLOR_GREEN, "USB up: {} device(s), {} HID (mouse/keyboard)",
+                    crate::drivers::xhci::device_count(), crate::drivers::xhci::hid_device_count());
+            } else {
+                crate::println_color!(COLOR_RED, "USB init failed (see the steps above)");
+            }
+        }
+        Some("status") => cmd_lsusb(),
+        Some(_) => crate::println!("Usage: usb [list|init [n]|status]"),
+    }
+}
+
 pub(super) fn cmd_lsusb() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "USB Devices:");
     crate::println!("-------------------------------------------");
-    
+
+    // Start USB on demand (it is deferred at boot).
+    if !crate::drivers::xhci::is_initialized() && !crate::drivers::xhci_controllers().is_empty() {
+        crate::println_color!(COLOR_YELLOW, "Starting USB...");
+        crate::drivers::xhci::set_verbose(true);
+        let _ = crate::drivers::init_xhci_deferred();
+        crate::drivers::xhci::set_verbose(false);
+    }
+
     // Check if xHCI is initialized
     if crate::drivers::xhci::is_initialized() {
         let devices = crate::drivers::xhci::list_devices();

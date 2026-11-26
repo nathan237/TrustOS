@@ -3312,11 +3312,55 @@ pub(super) fn cmd_beep(args: &[&str]) {
 pub(super) fn cmd_audio(args: &[&str]) {
     match args.first().copied() {
         Some("init") => {
+            // audio init      -> default controller (skips GPU HDMI audio)
+            // audio init <n>  -> controller number n from `audio list`
+            let pick = match args.get(1) {
+                Some(s) => match s.parse::<usize>() {
+                    Ok(n) => Some(n),
+                    Err(_) => {
+                        crate::println_color!(COLOR_YELLOW, "Usage: audio init [n]   (see `audio list`)");
+                        return;
+                    }
+                },
+                None => None,
+            };
             crate::print_color!(COLOR_YELLOW, "Initializing Intel HDA driver... ");
-            match crate::drivers::hda::init() {
-                Ok(()) => crate::println_color!(COLOR_GREEN, "OK"),
+            let res = match pick {
+                Some(n) => crate::drivers::hda::init_index(n),
+                None => crate::drivers::hda::init(),
+            };
+            match res {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "OK");
+                    if let Some((b, d, f)) = crate::drivers::hda::active_bdf() {
+                        crate::println!("  Using controller {:02X}:{:02X}.{}", b, d, f);
+                    }
+                }
                 Err(e) => crate::println_color!(COLOR_RED, "FAILED: {}", e),
             }
+        }
+        Some("list") => {
+            let list = crate::drivers::hda::list_controllers();
+            if list.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No HDA audio controllers found");
+                return;
+            }
+            let default = crate::drivers::hda::default_controller_index(&list);
+            let active = crate::drivers::hda::active_bdf();
+            crate::println_color!(COLOR_CYAN, "HDA audio controllers:");
+            for (i, d) in list.iter().enumerate() {
+                let kind = if crate::drivers::hda::is_hdmi_only(d) {
+                    "GPU HDMI/DP audio"
+                } else {
+                    "analog codec (speakers/headphones)"
+                };
+                let mut tags = String::new();
+                if Some(i) == default { tags.push_str(" [default]"); }
+                if active == Some((d.bus, d.device, d.function)) { tags.push_str(" [active]"); }
+                crate::println!("  {}: {:02X}:{:02X}.{}  {:04X}:{:04X}  {}{}",
+                    i, d.bus, d.device, d.function, d.vendor_id, d.device_id, kind, tags);
+            }
+            crate::println!("Select with: audio init <n>");
         }
         Some("status") | None => {
             let status = crate::drivers::hda::status();
@@ -3510,7 +3554,7 @@ pub(super) fn cmd_audio(args: &[&str]) {
         }
         Some(_other) => {
             crate::println_color!(COLOR_YELLOW,
-                "Usage: audio [init|status|stop|test|diag|dump|probe|gpio");
+                "Usage: audio [list|init [n]|status|stop|test|diag|dump|probe|gpio");
             crate::println_color!(COLOR_YELLOW,
                 "             |verb|jacks|errors|path|reset|scope|chan|sweep]");
         }
